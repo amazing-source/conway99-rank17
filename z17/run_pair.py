@@ -14,6 +14,7 @@ import stageB as B
 
 GOOD = {2, 6, 10}
 STATS = []
+DUMP = []
 
 
 def main():
@@ -127,6 +128,8 @@ def main():
                 st['pe_fail'] += 1
                 return
         st['leaves'] += 1
+        if DUMP:
+            DUMP[0].write(''.join('%02x' % c for c in cols) + chr(10))
         if samp is not None and rng.random() > samp:
             return
         if dedupe:
