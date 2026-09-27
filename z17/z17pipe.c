@@ -29,6 +29,8 @@ static long long st_leaves = 0, st_proc = 0, st_empty = 0, st_root = 0, st_deepe
                  st_limit = 0, m1_prunes = 0, st_nodes = 0;
 static time_t t_start, t_last;
 static long long debugN = 0; static FILE *fdbg = NULL;
+static double tm_build = 0, tm_prep = 0, tm_solve = 0;
+static int killer[NC + 1];
 
 static int pc(unsigned x) { return __builtin_popcount(x); }
 static double urand(void) { rng_state ^= rng_state << 13; rng_state ^= rng_state >> 7; rng_state ^= rng_state << 17; return (rng_state >> 11) * (1.0 / 9007199254740992.0); }
@@ -208,7 +210,10 @@ static int try_plain(int k, int t, double R[15][15]) {
     chosen[k] = t;
     int s[17];
     for (int v = 0; v < 7; v++) if (lastk[v] == k) { starsum(v, k, s); for (int i = 0; i < 17; i++) if (s[i]) return 0; }
-    for (int Y = k + 1; Y < NC; Y++) {
+    for (int yy = k; yy < NC; yy++) {
+        int Y;
+        if (yy == k) { Y = killer[k]; if (Y <= k || Y >= NC) continue; }
+        else { Y = yy; if (Y == k || (Y == killer[k] && killer[k] > k)) continue; }
         int m = 0, *src = levi[k][Y], ns = levn[k][Y], *dst = levi[k + 1][Y];
         for (int q = 0; q < ns; q++) {
             const signed char *u = dom[Y] + 34 * src[q];
@@ -220,7 +225,7 @@ static int try_plain(int k, int t, double R[15][15]) {
             }
             if (ok) dst[m++] = src[q];
         }
-        if (!m) return 0;
+        if (!m) { killer[k] = Y; return 0; }
         levn[k + 1][Y] = m;
     }
     for (int v = 0; v < 7; v++) {
@@ -407,6 +412,73 @@ static int solve_bits(long long capv, long long *nodes_out) {
     return r;
 }
 
+/* ---------------- S_7 x class-map canonical form (dedupe) ---------------- */
+static int dedupe = 0, nmaps = 1, cmap[8][64], ncls, clsn[64], clsidx[64][17];
+static signed char *PT;            /* 5040 x 128 */
+static int nperm = 0;
+static u64 *hset; static long long hsize = 0, hcount = 0, st_dup = 0;
+static void gen_perms(void) {
+    int p[7] = {0, 1, 2, 3, 4, 5, 6};
+    PT = malloc(5040 * 128);
+    int c[7] = {0}, i = 0;
+    for (;;) {
+        for (int x = 0; x < 128; x++) {
+            int y = 0;
+            for (int b = 0; b < 7; b++) if (x >> b & 1) y |= 1 << p[b];
+            if (y & 1) y ^= 127;
+            PT[nperm * 128 + x] = (signed char)y;
+        }
+        nperm++;
+        while (i < 7 && c[i] >= i) { c[i] = 0; i++; }
+        if (i >= 7) break;
+        if (i % 2 == 0) { int t = p[0]; p[0] = p[i]; p[i] = t; } else { int t = p[c[i]]; p[c[i]] = p[i]; p[i] = t; }
+        c[i]++; i = 0;
+    }
+}
+static void canon_form(const int *cols, unsigned char *best) {
+    unsigned char cur[17];
+    int first = 1;
+    for (int pi = 0; pi < nperm; pi++) {
+        const signed char *T = PT + pi * 128;
+        for (int mi = 0; mi < nmaps; mi++) {
+            int pos = 0;
+            for (int a = 0; a < ncls; a++) {
+                int src = cmap[mi][a];
+                unsigned char v[17];
+                int n = clsn[src];
+                for (int j = 0; j < n; j++) v[j] = (unsigned char)T[cols[clsidx[src][j]]];
+                for (int x = 1; x < n; x++) { unsigned char t = v[x]; int y = x - 1; while (y >= 0 && v[y] > t) { v[y + 1] = v[y]; y--; } v[y + 1] = t; }
+                for (int j = 0; j < n; j++) cur[pos++] = v[j];
+            }
+            if (first || memcmp(cur, best, 17) < 0) { memcpy(best, cur, 17); first = 0; }
+        }
+    }
+}
+static int hs_insert(const unsigned char *k17) {
+    u64 k[3] = {0, 0, 0};
+    memcpy(k, k17, 17);
+    k[2] |= 1ULL << 63;
+    if (hcount * 2 >= hsize) {
+        long long ns = hsize ? hsize * 2 : (1 << 20);
+        u64 *nh = calloc((size_t)ns * 3, sizeof(u64));
+        for (long long i = 0; i < hsize; i++) if (hset[3 * i + 2]) {
+            u64 h = (hset[3 * i] * 0x9E3779B97F4A7C15ULL) ^ (hset[3 * i + 1] * 0xC2B2AE3D27D4EB4FULL) ^ hset[3 * i + 2];
+            long long q = (long long)(h % (u64)ns);
+            while (nh[3 * q + 2]) q = (q + 1) % ns;
+            memcpy(nh + 3 * q, hset + 3 * i, 24);
+        }
+        free(hset); hset = nh; hsize = ns;
+    }
+    u64 h = (k[0] * 0x9E3779B97F4A7C15ULL) ^ (k[1] * 0xC2B2AE3D27D4EB4FULL) ^ k[2];
+    long long q = (long long)(h % (u64)hsize);
+    while (hset[3 * q + 2]) {
+        if (hset[3 * q] == k[0] && hset[3 * q + 1] == k[1] && hset[3 * q + 2] == k[2]) return 0;
+        q = (q + 1) % hsize;
+    }
+    memcpy(hset + 3 * q, k, 24); hcount++;
+    return 1;
+}
+
 /* ---------------- stage A ---------------- */
 typedef struct { int n; int idx[17]; } Part;
 static unsigned rows[7];
@@ -451,13 +523,24 @@ static void leaf(void) {
     }
     st_leaves++;
     if (samp < 1.0 && urand() > samp) return;
+    if (dedupe) {
+        unsigned char cf[17];
+        canon_form(cols, cf);
+        if (!hs_insert(cf)) { st_dup++; return; }
+    }
     st_proc++;
-    if (!build(rows, cols)) {
+    clock_t c0 = clock();
+    int bok = build(rows, cols);
+    tm_build += (double)(clock() - c0) / CLOCKS_PER_SEC;
+    if (!bok) {
         st_empty++;
         if (fdbg && st_proc <= debugN) { for (int i = 0; i < 17; i++) fprintf(fdbg, "%02x", cols[i]); fprintf(fdbg, " EMPTY 0\n"); }
         goto progress;
     }
+    c0 = clock();
     prep_common();
+    tm_prep += (double)(clock() - c0) / CLOCKS_PER_SEC;
+    c0 = clock();
     long long nd;
     int r = solve_plain(2000, &nd);
     if (r == 2) {
@@ -469,6 +552,7 @@ static void leaf(void) {
             fprintf(fsurv, "\n"); fflush(fsurv);
         }
     }
+    tm_solve += (double)(clock() - c0) / CLOCKS_PER_SEC;
     st_nodes += nd;
     if (fdbg && st_proc <= debugN) { for (int i = 0; i < 17; i++) fprintf(fdbg, "%02x", cols[i]); fprintf(fdbg, " %s %lld\n", r == 0 ? "EXCLUDED" : (r == 1 ? "FOUND" : "LIMIT"), nd); }
     if (r == 0) { if (nd == 1) st_root++; else st_deeper++; }
@@ -489,8 +573,9 @@ static void leaf(void) {
 progress:
     if (time(NULL) - t_last >= 120) {
         t_last = time(NULL);
-        printf("  leaves %lld processed %lld empty %lld root %lld deeper %lld heavy %lld found %lld limit %lld m1_prunes %lld (%lds)\n",
-               st_leaves, st_proc, st_empty, st_root, st_deeper, st_heavy, st_found, st_limit, m1_prunes, (long)(time(NULL) - t_start));
+        printf("  dup %lld | leaves %lld processed %lld empty %lld root %lld deeper %lld heavy %lld found %lld limit %lld m1_prunes %lld (%lds) t_build %.0f t_prep %.0f t_solve %.0f\n",
+               st_dup, st_leaves, st_proc, st_empty, st_root, st_deeper, st_heavy, st_found, st_limit, m1_prunes, (long)(time(NULL) - t_start),
+               tm_build, tm_prep, tm_solve);
         fflush(stdout);
     }
 }
@@ -555,6 +640,7 @@ int main(int argc, char **argv) {
         if (!strcmp(argv[a], "sample") && a + 2 < argc) { samp = atof(argv[a + 1]); rng_state ^= (u64)atoll(argv[a + 2]) * 0x9E3779B97F4A7C15ULL; if (!rng_state) rng_state = 1; a += 2; }
         else if (!strcmp(argv[a], "part") && a + 2 < argc) { part_r = atoi(argv[a + 1]); part_m = atoi(argv[a + 2]); a += 2; }
         else if (!strcmp(argv[a], "heavycap") && a + 1 < argc) { heavycap = atoll(argv[a + 1]); a += 1; }
+        else if (!strcmp(argv[a], "dedupe")) { dedupe = 1; }
         else if (!strcmp(argv[a], "debug") && a + 2 < argc) { debugN = atoll(argv[a + 1]); fdbg = fopen(argv[a + 2], "w"); a += 2; }
     }
     for (int i = 0; i < 17; i++) if (fscanf(f, "%d", &Y1[i]) != 1) return 1;
@@ -570,6 +656,17 @@ int main(int argc, char **argv) {
         for (int j = 0; j < parts[a].n; j++) if (fscanf(f, "%d", &parts[a].idx[j]) != 1) return 1;
     }
     for (int j = 0; j < 17 * 15; j++) if (fscanf(f, "%lf", &Bw[j]) != 1) { fprintf(stderr, "need Bw in input\n"); return 1; }
+    ncls = ncl;
+    for (int a = 0; a < ncl; a++) { clsn[a] = parts[a].n; memcpy(clsidx[a], parts[a].idx, sizeof(int) * parts[a].n); }
+    nmaps = 1;
+    for (int a = 0; a < ncl; a++) cmap[0][a] = a;
+    {
+        int nm;
+        if (fscanf(f, "%d", &nm) == 1 && nm >= 1) {
+            nmaps = nm;
+            for (int mi = 0; mi < nm; mi++) for (int a = 0; a < ncl; a++) if (fscanf(f, "%d", &cmap[mi][a]) != 1) return 1;
+        }
+    }
     fclose(f);
     usab = calloc(1u << 17, 1); amask = calloc(1u << 17, sizeof(int *)); namask = calloc(1u << 17, sizeof(int));
     cvec = calloc(1u << 17, sizeof(signed char *)); ncvec = calloc(1u << 17, sizeof(int));
@@ -584,13 +681,29 @@ int main(int argc, char **argv) {
     for (int v = 0; v < 7; v++) lastk[v] = -1;
     for (int x = 0; x < NC; x++) { lastk[CC[x]] = x; lastk[CD[x]] = x; }
     snprintf(fn, sizeof fn, "%s.surv", argv[2]); fsurv = fopen(fn, "w");
+    if (dedupe) gen_perms();
+    for (int a = 3; a < argc; a++) if (!strcmp(argv[a], "canontest") && a + 1 < argc) {
+        if (!dedupe) gen_perms();
+        FILE *ft = fopen(argv[a + 1], "r");
+        char line[128];
+        while (fgets(line, sizeof line, ft)) {
+            int cols[17];
+            for (int i = 0; i < 17; i++) { unsigned v; sscanf(line + 2 * i, "%2x", &v); cols[i] = (int)v; }
+            unsigned char cf[17];
+            canon_form(cols, cf);
+            for (int i = 0; i < 17; i++) printf("%d%s", cf[i], i < 16 ? " " : "");
+            printf("\n");
+        }
+        fclose(ft);
+        return 0;
+    }
     t_start = t_last = time(NULL);
     rows[0] = 0; nrows = 1;
     dfs(parts, ncl);
     snprintf(fn, sizeof fn, "%s.stats", argv[2]);
     FILE *fs = fopen(fn, "w");
-    fprintf(fs, "{\"leaves\": %lld, \"processed\": %lld, \"empty\": %lld, \"root\": %lld, \"deeper\": %lld, \"heavy\": %lld, \"found\": %lld, \"limit\": %lld, \"m1_prunes\": %lld, \"nodes\": %lld, \"sample\": %g, \"part\": [%d, %d], \"seconds\": %ld}\n",
-            st_leaves, st_proc, st_empty, st_root, st_deeper, st_heavy, st_found, st_limit, m1_prunes, st_nodes, samp, part_r, part_m, (long)(time(NULL) - t_start));
+    fprintf(fs, "{\"dup\": %lld, \"leaves\": %lld, \"processed\": %lld, \"empty\": %lld, \"root\": %lld, \"deeper\": %lld, \"heavy\": %lld, \"found\": %lld, \"limit\": %lld, \"m1_prunes\": %lld, \"nodes\": %lld, \"sample\": %g, \"part\": [%d, %d], \"seconds\": %ld}\n",
+            st_dup, st_leaves, st_proc, st_empty, st_root, st_deeper, st_heavy, st_found, st_limit, m1_prunes, st_nodes, samp, part_r, part_m, (long)(time(NULL) - t_start));
     fclose(fs); fclose(fsurv);
     if (fdbg) fclose(fdbg);
     printf("DONE leaves %lld processed %lld empty %lld root %lld deeper %lld heavy %lld found %lld limit %lld (%lds)\n",

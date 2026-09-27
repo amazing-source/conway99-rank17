@@ -18,3 +18,11 @@ with open(out, 'w') as f:
         import numpy as np
         _, _, Vt = np.linalg.svd(np.array([y1, y2], dtype=float))
         f.write(' '.join('%.17g' % x for x in Vt[2:].T.reshape(-1)) + '\n')
+    if '--bw' in sys.argv:                           # class maps (image slot b <- source class a) for the dedupe
+        maps = A.class_maps(y1, y2, cls)
+        f.write('%d\n' % len(maps))
+        for m in maps:
+            inv = [0] * len(m)
+            for a, b in enumerate(m):
+                inv[b] = a
+            f.write(' '.join(map(str, inv)) + '\n')
