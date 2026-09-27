@@ -93,6 +93,34 @@ static int *levi[NC + 1][NC], levn[NC + 1][NC];     /* plain solver: index lists
 static u64 *levb[NC + 1][NC];                       /* bitset solver */
 static u64 *compat[NC][NC];
 static u64 *htab; static int hcap = 0;
+/* 3-open star look-ahead: per vertex v, its last three cells L[v][0..2]; pair sum-sets H[v][pair] of contrib_v(p)+contrib_v(q)
+   over M2-compatible (p,q) of the ORIGINAL domains (a superset of what is still possible: valid necessary condition).
+   Keys: 17 entries in [-8,8] packed 5 bits each into two u64 (lo: coords 0..11, hi: 12..16). */
+static int L3v[7][3], has3[7][3];
+static u64 *H3[7][3]; static long long H3n[7][3];
+static long long st_sum3 = 0;
+static long long look3_cap = 150000;
+static void key85(const int *v, u64 *lo, u64 *hi) {
+    u64 a = 0, b = 0;
+    for (int i = 0; i < 12; i++) a |= (u64)(v[i] + 16) << (5 * i);
+    for (int i = 12; i < 17; i++) b |= (u64)(v[i] + 16) << (5 * (i - 12));
+    *lo = a; *hi = b | (1ULL << 40);
+}
+static u64 hmix(u64 a, u64 b) { u64 h = a * 0x9E3779B97F4A7C15ULL ^ b * 0xC2B2AE3D27D4EB4FULL; return h ^ (h >> 31); }
+static void h3_insert(u64 *T, long long n, u64 a, u64 b) {
+    long long q = (long long)(hmix(a, b) % (u64)n);
+    while (T[2 * q + 1]) { if (T[2 * q] == a && T[2 * q + 1] == b) return; q = (q + 1) % n; }
+    T[2 * q] = a; T[2 * q + 1] = b;
+}
+static int h3_has(const u64 *T, long long n, u64 a, u64 b) {
+    long long q = (long long)(hmix(a, b) % (u64)n);
+    while (T[2 * q + 1]) { if (T[2 * q] == a && T[2 * q + 1] == b) return 1; q = (q + 1) % n; }
+    return 0;
+}
+static void contrib(int X, int t, int v, int *out) {
+    const signed char *u = dom[X] + 34 * t;
+    for (int i = 0; i < 17; i++) out[i] = (CC[X] == v) ? u[i] + u[17 + i] : u[i] - u[17 + i];
+}
 
 static unsigned long long ckey(const signed char *u, int plus, const int *v) {
     unsigned long long k = 0;
@@ -331,6 +359,26 @@ static int try_bits(int k, int t, double R[15][15]) {
                 }
                 if (!anybit(bA, nwd[A])) return 0;
             }
+        } else if (cnt == 3) {
+            starsum(v, k, s);
+            for (int pr = 0; pr < 3; pr++) {
+                if (!has3[v][pr]) continue;
+                int A = L3v[v][pr];
+                u64 *bA = levb[k + 1][A];
+                for (int w = 0; w < nwd[A]; w++) {
+                    u64 x = bA[w];
+                    while (x) {
+                        int bit = __builtin_ctzll(x); x &= x - 1;
+                        int ca[17], need[17], okr = 1;
+                        contrib(A, 64 * w + bit, v, ca);
+                        for (int i = 0; i < 17; i++) { need[i] = -s[i] - ca[i]; if (need[i] < -16 || need[i] > 15) okr = 0; }
+                        int found = 0;
+                        if (okr) { u64 lo, hi; key85(need, &lo, &hi); found = h3_has(H3[v][pr], H3n[v][pr], lo, hi); }
+                        if (!found) { bA[w] &= ~(1ULL << bit); st_sum3++; }
+                    }
+                }
+                if (!anybit(bA, nwd[A])) return 0;
+            }
         }
     }
     return rec_bits(k + 1, R2);
@@ -399,10 +447,37 @@ static int solve_bits(long long capv, long long *nodes_out) {
             }
         }
     }
+    for (int v = 0; v < 7; v++) {
+        int cnt = 0, cells[6];
+        for (int X = 0; X < NC; X++) if (CC[X] == v || CD[X] == v) cells[cnt++] = X;
+        L3v[v][0] = cells[3]; L3v[v][1] = cells[4]; L3v[v][2] = cells[5];
+        for (int pr = 0; pr < 3; pr++) {                   /* pr = index of the EXCLUDED cell; the other two form the pair */
+            int P = L3v[v][pr == 0 ? 1 : 0], Q = L3v[v][pr == 2 ? 1 : 2];
+            has3[v][pr] = 0; H3[v][pr] = NULL;
+            if ((long long)ndom[P] * ndom[Q] > look3_cap) continue;
+            long long n = 3 * (long long)ndom[P] * ndom[Q] + 16;
+            u64 *T = calloc((size_t)n * 2, sizeof(u64));
+            for (int a = 0; a < ndom[P]; a++) {
+                const u64 *row = compat[P][Q] + (size_t)a * nwd[Q];
+                int ca[17]; contrib(P, a, v, ca);
+                for (int w = 0; w < nwd[Q]; w++) {
+                    u64 x = row[w];
+                    while (x) {
+                        int bit = __builtin_ctzll(x); x &= x - 1;
+                        int cb[17], sm[17]; contrib(Q, 64 * w + bit, v, cb);
+                        for (int i = 0; i < 17; i++) sm[i] = ca[i] + cb[i];
+                        u64 lo, hi; key85(sm, &lo, &hi); h3_insert(T, n, lo, hi);
+                    }
+                }
+            }
+            H3[v][pr] = T; H3n[v][pr] = n; has3[v][pr] = 1;
+        }
+    }
     nodes = 0; cap = capv;
     double R[15][15];
     for (int i = 0; i < 15; i++) for (int j = 0; j < 15; j++) R[i][j] = (i == j) ? 28.0 : 0.0;
     int r = rec_bits(0, R);
+    for (int v = 0; v < 7; v++) for (int pr = 0; pr < 3; pr++) if (has3[v][pr]) { free(H3[v][pr]); has3[v][pr] = 0; }
     for (int X = 0; X < NC; X++) {
         free(kp[X]); free(km[X]);
         for (int L = 0; L <= NC; L++) free(levb[L][X]);
@@ -682,6 +757,28 @@ int main(int argc, char **argv) {
     for (int x = 0; x < NC; x++) { lastk[CC[x]] = x; lastk[CD[x]] = x; }
     snprintf(fn, sizeof fn, "%s.surv", argv[2]); fsurv = fopen(fn, "w");
     if (dedupe) gen_perms();
+    for (int a = 3; a < argc; a++) if (!strcmp(argv[a], "leaves") && a + 1 < argc) {
+        FILE *ft = fopen(argv[a + 1], "r");
+        char line[128];
+        while (fgets(line, sizeof line, ft)) {
+            int cols[17];
+            for (int i = 0; i < 17; i++) { unsigned v; sscanf(line + 2 * i, "%2x", &v); cols[i] = (int)v; }
+            unsigned rw[7];
+            for (int e = 0; e < 7; e++) { rw[e] = 0; for (int i = 0; i < 17; i++) if (cols[i] >> e & 1) rw[e] |= 1u << i; }
+            for (int c = 0; c < 7; c++) for (int d = c + 1; d < 7; d++) usable(rw[c] ^ rw[d]);
+            clock_t c0 = clock();
+            if (!build(rw, cols)) { printf("EMPTY 0 0.0s%c", 10); continue; }
+            prep_common();
+            long long nd; int r = solve_plain(2000, &nd), tier = 1;
+            if (r == 2) { r = solve_bits(heavycap, &nd); tier = 2; }
+            printf("%s %lld tier%d %.1fs sum3prunes %lld%c", r == 0 ? "EXCLUDED" : (r == 1 ? "FOUND" : "LIMIT"), nd, tier,
+                   (double)(clock() - c0) / CLOCKS_PER_SEC, st_sum3, 10);
+            fflush(stdout);
+            free_common();
+        }
+        fclose(ft);
+        return 0;
+    }
     for (int a = 3; a < argc; a++) if (!strcmp(argv[a], "canontest") && a + 1 < argc) {
         if (!dedupe) gen_perms();
         FILE *ft = fopen(argv[a + 1], "r");
