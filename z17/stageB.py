@@ -302,3 +302,64 @@ if __name__ == '__main__':
         v = solve(sk, 10 ** 6, st) if min(sz) > 0 else 'EXCLUDED(empty cell)'
         print(n, 'N', [bin(pis[c] ^ pis[d]).count('1') for c, d in CELLS], 'dom', sz, v, st.get('nodes'), '%.1fs' % (time.time() - t0),
               flush=True)
+
+
+def export_c(sk, path, cap):
+    """Binary input for sbdfs.exe (see sbdfs.c)."""
+    import struct
+    Y = sk.z.Y.astype(float)
+    _, _, Vt = np.linalg.svd(Y)
+    Bw = Vt[2:].T                                  # 17 x 15 orthonormal basis of W
+    with open(path, 'wb') as f:
+        f.write(struct.pack('<i', int(min(cap, 2 ** 31 - 1))))
+        f.write(np.ascontiguousarray(Bw, dtype='<f8').tobytes())
+        for cd in CELLS:
+            P, M = sk.dom[cd]
+            f.write(struct.pack('<i', len(P)))
+            if len(P):
+                f.write(np.ascontiguousarray(np.hstack([P, M]), dtype=np.int8).tobytes())
+
+
+def solve_c(sk, cap=10 ** 8, exe=None, tmpdir=None):
+    import subprocess, tempfile
+    exe = exe or os.path.join(HERE, 'sbdfs.exe')
+    fd, path = tempfile.mkstemp(suffix='.bin', dir=tmpdir or os.path.join(HERE, 'out'))
+    os.close(fd)
+    try:
+        export_c(sk, path, cap)
+        out = subprocess.run([exe, path], capture_output=True, text=True).stdout.split('\n')
+    finally:
+        os.remove(path)
+    head = out[0].split()
+    res = {'verdict': head[0], 'nodes': int(head[1]), 'depth': [int(x) for x in head[2:]]}
+    if head[0] == 'FOUND':
+        res['sol'] = [list(map(int, l.split())) for l in out[1:] if l.strip()]
+    return res
+
+
+def export_g(path, cap, G, M, doms):
+    """General-V input for sbdfs_g.exe.  G: 17x17 int Gram of V in the chosen basis; M: 17x15 float with
+    proj(x)_j = sum_i x_i M[i][j] an orthonormal-coordinates projection onto W; doms: 21 pairs (P, Mn) of int arrays (n,17)
+    in CELLS order (coordinates in the same basis)."""
+    import struct
+    with open(path, 'wb') as f:
+        f.write(struct.pack('<i', int(min(cap, 2 ** 31 - 1))))
+        f.write(np.ascontiguousarray(np.asarray(G), dtype='<i4').tobytes())
+        f.write(np.ascontiguousarray(np.asarray(M), dtype='<f8').tobytes())
+        for P, Mn in doms:
+            P = np.asarray(P); Mn = np.asarray(Mn)
+            assert P.size == 0 or (np.abs(P).max() <= 127 and np.abs(Mn).max() <= 127)
+            f.write(struct.pack('<i', len(P)))
+            if len(P):
+                f.write(np.ascontiguousarray(np.hstack([P, Mn]), dtype=np.int8).tobytes())
+
+
+def solve_g(path, exe=None):
+    import subprocess
+    exe = exe or os.path.join(HERE, 'sbdfs_g.exe')
+    out = subprocess.run([exe, path], capture_output=True, text=True).stdout.split('\n')
+    head = out[0].split()
+    res = {'verdict': head[0], 'nodes': int(head[1]), 'depth': [int(x) for x in head[2:]]}
+    if head[0] == 'FOUND':
+        res['sol'] = [list(map(int, l.split())) for l in out[1:] if l.strip()]
+    return res

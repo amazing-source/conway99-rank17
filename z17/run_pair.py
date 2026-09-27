@@ -13,6 +13,7 @@ import stageA as A
 import stageB as B
 
 GOOD = {2, 6, 10}
+STATS = []
 
 
 def main():
@@ -20,7 +21,7 @@ def main():
     pid = int(argv[0])
     samp = float(argv[argv.index('--sample') + 1]) if '--sample' in argv else None
     seed = int(argv[argv.index('--seed') + 1]) if '--seed' in argv else 0
-    nlim = int(argv[argv.index('--nodes') + 1]) if '--nodes' in argv else 10 ** 5
+    nlim = int(argv[argv.index('--nodes') + 1]) if '--nodes' in argv else 2 * 10 ** 7
     out = argv[argv.index('--out') + 1] if '--out' in argv else None
     rng = random.Random(seed)
     z = B.Z17(pid)
@@ -36,13 +37,16 @@ def main():
         if bin(Bm).count('1') == 1:
             i = Bm.bit_length() - 1
             kmax_c[i] = min(kmax_c[i], km)
-    tight = [i for i in range(17) if kmax_c[i] < 3]
+    tight = [(Bm, km, bin(Bm).count('1') == 1) for Bm, km in pe_items if km < 3]
 
     def kfeasible(rows):
+        # every PE item (B, kmax): the column sum over B has weight W = #rows with odd |B & row|; final k = min(W, 7-W) must be
+        # <= kmax (and >= 1 for a single coordinate: units).  Prune when no final weight in reach works.
         rem = 7 - len(rows)
-        for i in tight:
-            w = sum(1 for m in rows if m >> i & 1)
-            if not any(1 <= min(W, 7 - W) <= kmax_c[i] for W in range(w, w + rem + 1)):
+        for Bm, km, single in tight:
+            w = sum(1 for m in rows if bin(m & Bm).count('1') & 1)
+            lo = 1 if single else 0
+            if not any(lo <= min(W, 7 - W) <= km for W in range(w, w + rem + 1)):
                 return False
         return True
 
@@ -59,6 +63,7 @@ def main():
         return r
 
     st = {'leaves': 0, 'processed': 0, 'empty': 0, 'root': 0, 'deeper': 0, 'found': 0, 'limit': 0, 'pe_fail': 0}
+    STATS.append(st)
     surv = []
     t0 = time.time()
 
@@ -125,10 +130,13 @@ def main():
         if min(sk.sizes()) == 0:
             st['empty'] += 1
         else:
-            s2 = {}
-            v = B.solve(sk, nlim, s2)
+            s2 = B.solve_c(sk, nlim)
+            v = s2['verdict']
             if v == 'EXCLUDED':
                 st['root' if s2['nodes'] == 1 else 'deeper'] += 1
+                if s2['nodes'] > 10 ** 5:
+                    st['heavy'] = st.get('heavy', 0) + 1
+                    print('  HEAVY-EXCLUDED %d nodes %s' % (s2['nodes'], cols), flush=True)
             else:
                 st['found' if v == 'FOUND' else 'limit'] += 1
                 surv.append({'cols': cols, 'verdict': v, 'nodes': s2['nodes'], 'sol': s2.get('sol')})
