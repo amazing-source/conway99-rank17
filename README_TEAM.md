@@ -51,10 +51,29 @@
   - All reproduce the Python node counts exactly.
   - `sbdfs_g` was also tested in a random basis.
 
-## Status (28/09 ~01:15)
+## Status (28/09 ~01:50)
 
-- **Pair 0:** PASS 1, 1,248 sampled skeletons, 0 survivors.
-  - Kill mix: 31% empty cell (M1), 65% root (M2), 3% deeper.
-  - Leads 364a… (26,185 nodes) and 067a… (9.9M / 196,637 nodes): both EXCLUDED.
-- **Pair 4:** PASS 1 in progress, 226 processed, 0 survivors.
-- **Pairs 5, 7, 2 and 6, 1, 3:** PASS 1 queued or running, in 2 batches.
+### PASS 1 (Python, 5% samples), all PATTERN
+
+| Pair | Processed | Survivors | Notes |
+|---|---|---|---|
+| 0 | 1,248 | 0 | Both leads EXCLUDED |
+| 4 | 1,910 | 0 | 9 heavy cases, all EXCLUDED |
+| 5 | 132 | 0 | |
+
+### PASS 2 (exhaustive, all C, `z17/z17pipe.c` → COMPUTED once finished)
+
+Running on pairs 0 and 4. So far 0 survivors on either.
+
+Pipeline:
+- stage A as above, with incremental M1 (prunes 55% of leaves);
+- S₇ canonical dedupe: 79–87% of leaves are duplicates;
+- per-leaf domain build;
+- two-tier exact DFS: plain search to 2000 nodes, then bitsets with 1-, 2- and 3-open star look-ahead.
+
+Checks against the Python pipeline:
+- identical verdicts and node counts on 150 + 150 leaves;
+- the canonical form matches Python on 400 leaves;
+- every later speed-up keeps the same verdicts.
+
+Also in `bin/`: static builds (UCRT only) of `sbdfs_g.exe` (the general-V stage B), `z17pipe.exe` and `stageA.exe`.
