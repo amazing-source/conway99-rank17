@@ -14,3 +14,7 @@ with open(out, 'w') as f:
     f.write('%d\n' % len(keys))
     for k in keys:
         f.write('%d %s\n' % (len(cls[k]), ' '.join(map(str, cls[k]))))
+    if '--bw' in sys.argv:                           # orthonormal basis of W for z17pipe.exe
+        import numpy as np
+        _, _, Vt = np.linalg.svd(np.array([y1, y2], dtype=float))
+        f.write(' '.join('%.17g' % x for x in Vt[2:].T.reshape(-1)) + '\n')
