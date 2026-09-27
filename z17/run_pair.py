@@ -24,6 +24,7 @@ def main():
     nlim = int(argv[argv.index('--nodes') + 1]) if '--nodes' in argv else 2 * 10 ** 7
     out = argv[argv.index('--out') + 1] if '--out' in argv else None
     rng = random.Random(seed)
+    dedupe = '--dedupe' in argv
     z = B.Z17(pid)
     y1, y2 = z.y1, z.y2
     cls = A.classes_of(y1, y2)
@@ -65,6 +66,9 @@ def main():
     st = {'leaves': 0, 'processed': 0, 'empty': 0, 'root': 0, 'deeper': 0, 'found': 0, 'limit': 0, 'pe_fail': 0}
     STATS.append(st)
     surv = []
+    seen = set()
+    PT = A.perm_tables() if '--dedupe' in argv else None
+    cmaps = A.class_maps(y1, y2, cls)
     t0 = time.time()
 
     def choose_row(parts, need_min, prev, wmin, forced):
@@ -125,12 +129,20 @@ def main():
         st['leaves'] += 1
         if samp is not None and rng.random() > samp:
             return
+        if dedupe:
+            cf = A.canon(cols, cls, keys, PT, cmaps)
+            if cf in seen:
+                st['dup'] = st.get('dup', 0) + 1
+                return
+            seen.add(cf)
         st['processed'] += 1
         sk = B.Skeleton(z, list(rows)).build()
         if min(sk.sizes()) == 0:
             st['empty'] += 1
         else:
-            s2 = B.solve_c(sk, nlim)
+            s2 = B.solve_c(sk, 2000)                               # cheap first pass
+            if s2['verdict'] == 'LIMIT':
+                s2 = B.solve_c(sk, nlim, exe=os.path.join(HERE, 'sbdfs3.exe'))   # bitsets + 2-open look-ahead
             v = s2['verdict']
             if v == 'EXCLUDED':
                 st['root' if s2['nodes'] == 1 else 'deeper'] += 1
