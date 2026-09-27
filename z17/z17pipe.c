@@ -92,6 +92,24 @@ static long long nodes, cap;
 static int *levi[NC + 1][NC], levn[NC + 1][NC];     /* plain solver: index lists */
 static u64 *levb[NC + 1][NC];                       /* bitset solver */
 static u64 *compat[NC][NC];
+static unsigned char *rowdone[NC];
+static void compat_row(int X, int t) {
+    const signed char *a = dom[X] + 34 * t;
+    for (int Y = X + 1; Y < NC; Y++) {
+        u64 *row = compat[X][Y] + (size_t)t * nwd[Y];
+        for (int q = 0; q < ndom[Y]; q++) {
+            const signed char *b = dom[Y] + 34 * q;
+            int ok = 1;
+            for (int s2 = 0; s2 < 2 && ok; s2++) for (int tt = 0; tt < 2 && ok; tt++) {
+                int g = rrt[X][Y][s2][tt];
+                for (int i = 0; i < 17; i++) g += a[17 * s2 + i] * b[17 * tt + i];
+                if (!(g == 0 || g == 4 || g == -4)) ok = 0;
+            }
+            if (ok) row[q >> 6] |= 1ULL << (q & 63);
+        }
+    }
+    rowdone[X][t] = 1;
+}
 static u64 *htab; static int hcap = 0;
 /* 3-open star look-ahead: per vertex v, its last three cells L[v][0..2]; pair sum-sets H[v][pair] of contrib_v(p)+contrib_v(q)
    over M2-compatible (p,q) of the ORIGINAL domains (a superset of what is still possible: valid necessary condition).
@@ -293,6 +311,7 @@ static int try_bits(int k, int t, double R[15][15]) {
     chosen[k] = t;
     int s[17];
     for (int v = 0; v < 7; v++) if (lastk[v] == k) { starsum(v, k, s); for (int i = 0; i < 17; i++) if (s[i]) return 0; }
+    if (!rowdone[k][t]) compat_row(k, t);
     for (int Y = k + 1; Y < NC; Y++) {
         const u64 *cm = compat[k][Y] + (size_t)t * nwd[Y];
         u64 *src = levb[k][Y], *dst = levb[k + 1][Y], acc = 0;
@@ -430,22 +449,9 @@ static int solve_bits(long long capv, long long *nodes_out) {
         for (int L = 0; L <= NC; L++) levb[L][X] = calloc((size_t)nwd[X], sizeof(u64));
         for (int t = 0; t < ndom[X]; t++) levb[0][X][t >> 6] |= 1ULL << (t & 63);
     }
-    for (int X = 0; X < NC; X++) for (int Y = X + 1; Y < NC; Y++) {
-        compat[X][Y] = calloc((size_t)ndom[X] * nwd[Y], sizeof(u64));
-        for (int t = 0; t < ndom[X]; t++) {
-            const signed char *a = dom[X] + 34 * t;
-            u64 *row = compat[X][Y] + (size_t)t * nwd[Y];
-            for (int q = 0; q < ndom[Y]; q++) {
-                const signed char *b = dom[Y] + 34 * q;
-                int ok = 1;
-                for (int s = 0; s < 2 && ok; s++) for (int tt = 0; tt < 2 && ok; tt++) {
-                    int g = rrt[X][Y][s][tt];
-                    for (int i = 0; i < 17; i++) g += a[17 * s + i] * b[17 * tt + i];
-                    if (!(g == 0 || g == 4 || g == -4)) ok = 0;
-                }
-                if (ok) row[q >> 6] |= 1ULL << (q & 63);
-            }
-        }
+    for (int X = 0; X < NC; X++) {
+        rowdone[X] = calloc((size_t)(ndom[X] ? ndom[X] : 1), 1);
+        for (int Y = X + 1; Y < NC; Y++) compat[X][Y] = calloc((size_t)ndom[X] * nwd[Y], sizeof(u64));
     }
     for (int v = 0; v < 7; v++) {
         int cnt = 0, cells[6];
@@ -455,6 +461,7 @@ static int solve_bits(long long capv, long long *nodes_out) {
             int P = L3v[v][pr == 0 ? 1 : 0], Q = L3v[v][pr == 2 ? 1 : 2];
             has3[v][pr] = 0; H3[v][pr] = NULL;
             if ((long long)ndom[P] * ndom[Q] > look3_cap) continue;
+            for (int a = 0; a < ndom[P]; a++) if (!rowdone[P][a]) compat_row(P, a);
             long long n = 3 * (long long)ndom[P] * ndom[Q] + 16;
             u64 *T = calloc((size_t)n * 2, sizeof(u64));
             for (int a = 0; a < ndom[P]; a++) {
@@ -482,6 +489,7 @@ static int solve_bits(long long capv, long long *nodes_out) {
         free(kp[X]); free(km[X]);
         for (int L = 0; L <= NC; L++) free(levb[L][X]);
         for (int Y = X + 1; Y < NC; Y++) free(compat[X][Y]);
+        free(rowdone[X]);
     }
     *nodes_out = nodes;
     return r;
