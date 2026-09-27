@@ -1,0 +1,4 @@
+logs/
+z17/out/*.raw
+z17/__pycache__/
+*.pyc
