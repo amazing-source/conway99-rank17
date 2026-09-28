@@ -987,6 +987,12 @@ static int hs_insert(const unsigned char *k17) {
 typedef struct { int n; int idx[17]; } Part;
 static unsigned rows[7];
 static int nrows;
+/* Knuth estimator of the stage-A tree (mode "knuth NW seed [solve]"): random root-to-leaf walks, one child drawn uniformly
+   per level by reservoir sampling; the product of the branching factors is an unbiased estimate of the number of leaves. */
+static int knuth_mode = 0, knuth_solve = 0, knuth_pz4 = 0;
+static double kn_pzkill[8], kn_pzsec[8];
+static int kn_firstfail;
+static long long kn_cnt[8]; static unsigned kn_m[8]; static Part kn_parts[8][64]; static int kn_np[8];
 
 static int m1_ok(void) {
     for (int c = 0; c < nrows; c++)
@@ -1135,7 +1141,11 @@ static void choose(Part *parts, int np, int a, int wt, unsigned forced) {
                 if (selv[b]) { np2[n2].n = selv[b]; memcpy(np2[n2].idx, parts[b].idx, sizeof(int) * selv[b]); n2++; }
                 if (selv[b] < parts[b].n) { np2[n2].n = parts[b].n - selv[b]; memcpy(np2[n2].idx, parts[b].idx + selv[b], sizeof(int) * (parts[b].n - selv[b])); n2++; }
             }
-            dfs(np2, n2);
+            if (knuth_mode) {
+                int L = nrows - 1;
+                kn_cnt[L]++;
+                if (urand() * (double)kn_cnt[L] < 1.0) { kn_m[L] = m; kn_np[L] = n2; memcpy(kn_parts[L], np2, sizeof(Part) * (size_t)n2); }
+            } else dfs(np2, n2);
         }
         nrows--;
         return;
@@ -1158,6 +1168,166 @@ static void dfs(Part *parts, int np) {
     memcpy(selv, save, sizeof save);
 }
 
+/* ---- partial Z4 test at stage-A depth k (sound: M1 and the signatures restricted to rows 1..k, no L1 refinement) ---- */
+typedef struct { unsigned x, am; unsigned char fl; } PTrip;
+static PTrip **ptr_c; static int *ptr_n;
+static void ptrip_build(unsigned S) {
+    if (ptr_c[S]) return;
+    usable(S);
+    int n = ncvec[S];
+    const signed char *W = cvec[S];
+    int cap = 256, m = 0;
+    PTrip *T = malloc(sizeof(PTrip) * (size_t)cap);
+    /* hash of distinct triples */
+    int hc = 1 << 12;
+    u64 *H = calloc((size_t)hc, sizeof(u64));
+    for (int p = 0; p < n; p++) {
+        const signed char *wp = W + 17 * p;
+        unsigned x = 0;
+        for (int i = 0; i < 17; i++) { int q = wp[i], xi; if (q & 1) xi = ((((q - 1) % 4) + 4) % 4) / 2; else xi = (((q % 4) + 4) % 4) / 2; if (xi) x |= 1u << i; }
+        for (int q = 0; q < n; q++) {
+            if (q == p) continue;
+            const signed char *wq = W + 17 * q;
+            int g = 0;
+            for (int i = 0; i < 17; i++) g += wp[i] * wq[i];
+            if (!(g == 0 || g == 4 || g == -4)) continue;
+            int a[17], b[17]; unsigned am = 0;
+            for (int i = 0; i < 17; i++) { a[i] = (wp[i] + wq[i]) / 2; b[i] = (wp[i] - wq[i]) / 2; if (a[i] & 1) am |= 1u << i; }
+            unsigned char fl = 0;
+            if (use_csign) { if (first_pos_nz(b) != 0) fl |= 1; if (first_pos_nz(a) != 0) fl |= 2; }
+            else { if (first_pos(b)) fl |= 1; if (first_pos(a)) fl |= 2; }
+            u64 key = ((u64)x << 20 | am) << 2 | fl, h = (key * 0x9E3779B97F4A7C15ULL) >> 20;
+            int pos = (int)(h & (u64)(hc - 1)), dup = 0;
+            while (H[pos]) { if (H[pos] == key + 1) { dup = 1; break; } pos = (pos + 1) & (hc - 1); }
+            if (dup) continue;
+            H[pos] = key + 1;
+            if (m == cap) { cap *= 2; T = realloc(T, sizeof(PTrip) * (size_t)cap); }
+            T[m].x = x; T[m].am = am; T[m].fl = fl; m++;
+            if (2 * m > hc) {                           /* grow and rehash */
+                int hc2 = hc * 2;
+                u64 *H2 = calloc((size_t)hc2, sizeof(u64));
+                for (int j = 0; j < m; j++) {
+                    u64 k2 = ((u64)T[j].x << 20 | T[j].am) << 2 | T[j].fl, h2 = (k2 * 0x9E3779B97F4A7C15ULL) >> 20;
+                    int ps = (int)(h2 & (u64)(hc2 - 1));
+                    while (H2[ps]) ps = (ps + 1) & (hc2 - 1);
+                    H2[ps] = k2 + 1;
+                }
+                free(H); H = H2; hc = hc2;
+            }
+        }
+    }
+    free(H);
+    ptr_c[S] = T; ptr_n[S] = m;
+}
+static u64 pSig[7][7];
+static int pM[7], pk;
+static int pJ[7][7], pkap[7][7];
+static int pz4_rec(int c) {
+    if (c > pk) return 1;
+    u64 S = pSig[0][c];
+    while (S) {
+        int m = __builtin_ctzll(S); S &= S - 1;
+        int ok = 1;
+        for (int e = 1; e < c && ok; e++) if ((((m >> (e - 1)) & 1) ^ ((pM[e] >> (c - 1)) & 1)) != pJ[c][e]) ok = 0;
+        for (int e = 1; e < c && ok; e++) { int v = pM[e] ^ m ^ pkap[e][c]; if (!(pSig[e][c] >> v & 1)) ok = 0; }
+        if (!ok) continue;
+        pM[c] = m;
+        if (pz4_rec(c + 1)) return 1;
+    }
+    return 0;
+}
+static long long st_pz4_calls = 0, st_pz4_kill = 0;
+static int pz4_ok(int k) {                 /* rows[0..k] set; tests the cells among vertices 0..k */
+    st_pz4_calls++;
+    unsigned bzk[7];
+    for (int c = 1; c <= k; c++) bzk[c] = 1u | (1u << c) | (rows[c] << 7);
+    for (int c = 1; c <= k; c++) for (int e = 1; e <= k; e++) pJ[c][e] = (pc(bzk[c] & bzk[e]) / 2) & 1;
+    for (int c = 1; c <= k; c++) for (int d = 1; d <= k; d++) {
+        int v = 0;
+        for (int e = 1; e <= k; e++) if (pc(bzk[c] & bzk[d] & bzk[e]) & 1) v |= 1 << (e - 1);
+        pkap[c][d] = v;
+    }
+    for (int c = 0; c <= k; c++) for (int d = c + 1; d <= k; d++) {
+        unsigned S = rows[c] ^ rows[d];
+        ptrip_build(S);
+        const PTrip *T = ptr_c[S]; int n = ptr_n[S];
+        unsigned char need = (c == 0) ? (d == 1 ? 3 : 1) : 0;
+        int tgv = 0;                                  /* required parities of a.rows[e], e = 1..k */
+        for (int e = 1; e <= k; e++) { int tg = (c == 0) ? 1 : (e == c); if (tg) tgv |= 1 << (e - 1); }
+        u64 sig = 0;
+        for (int t = 0; t < n; t++) {
+            if ((T[t].fl & need) != need) continue;
+            int par = 0, sg = 0;
+            for (int e = 1; e <= k; e++) {
+                if (pc(T[t].am & rows[e]) & 1) par |= 1 << (e - 1);
+                if (pc(T[t].x & rows[e]) & 1) sg |= 1 << (e - 1);
+            }
+            if (par != tgv) continue;
+            sig |= 1ULL << sg;
+        }
+        if (!sig) { st_pz4_kill++; return 0; }
+        pSig[c][d] = sig;
+    }
+    pk = k;
+    int r = pz4_rec(1);
+    if (!r) st_pz4_kill++;
+    return r;
+}
+
+/* one Knuth walk from the root; returns the weight of the reached leaf (0 on a dead end); *cls: 0 dead end or uncovered,
+   1 empty/z4-dead, 2 excluded by the solver, 3 found/limit (only with knuth_solve); *secs: solver seconds */
+static double knuth_walk(Part *parts0, int np0, int *cls, double *secs, double *wdepth) {
+    Part cur[64]; int ncur = np0;
+    memcpy(cur, parts0, sizeof(Part) * (size_t)np0);
+    double w = 1.0;
+    rows[0] = 0; nrows = 1;
+    *cls = 0; *secs = 0; kn_firstfail = 0;
+    while (nrows < 7) {
+        int L = nrows;
+        kn_cnt[L] = 0;
+        unsigned forced = 0;
+        if (nrows == 6) {
+            unsigned cov = 0;
+            for (int r = 0; r < 6; r++) cov |= rows[r];
+            for (int a = 0; a < ncur; a++) if (!(cov >> cur[a].idx[0] & 1)) forced |= 1u << a;
+        }
+        memset(selv, 0, sizeof selv);
+        choose(cur, ncur, 0, 0, forced);
+        if (kn_cnt[L] == 0) return 0.0;
+        w *= (double)kn_cnt[L];
+        wdepth[L] += w;
+        rows[nrows++] = kn_m[L];
+        ncur = kn_np[L];
+        memcpy(cur, kn_parts[L], sizeof(Part) * (size_t)ncur);
+        if (knuth_pz4 && L >= 2) {
+            clock_t c1 = clock();
+            int ok = pz4_ok(L);
+            kn_pzsec[L] += w * (double)(clock() - c1) / CLOCKS_PER_SEC;
+            if (!ok) { kn_pzkill[L] += w; if (!kn_firstfail) kn_firstfail = L; }
+        }
+    }
+    int cols[17];
+    for (int i = 0; i < 17; i++) {
+        int c = 0;
+        for (int r = 0; r < 7; r++) if (rows[r] >> i & 1) c |= 1 << r;
+        if (!c) return 0.0;
+        cols[i] = c;
+    }
+    *cls = 1;
+    if (!knuth_solve) return w;
+    clock_t c0 = clock();
+    if (!build(rows, cols)) { *secs = (double)(clock() - c0) / CLOCKS_PER_SEC; return w; }
+    if (use_z4 && !z4_ok(rows)) { free_common_dom(); *secs = (double)(clock() - c0) / CLOCKS_PER_SEC; return w; }
+    if (use_z4 && use_zfilter) zfilter();
+    prep_common();
+    long long nd; int r = solve_plain(2000, &nd);
+    if (r == 2) r = solve_bits(heavycap, &nd);
+    free_common();
+    *secs = (double)(clock() - c0) / CLOCKS_PER_SEC;
+    *cls = (r == 0) ? 2 : 3;
+    return w;
+}
+
 int main(int argc, char **argv) {
     FILE *f = fopen(argv[1], "r");
     char fn[1024];
@@ -1175,6 +1345,9 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "nozfilter")) { use_zfilter = 0; }
         else if (!strcmp(argv[a], "nozsac")) { use_zsac = 0; }
         else if (!strcmp(argv[a], "probe") && a + 2 < argc) { probe_q = atof(argv[a + 1]); rng_state ^= (u64)atoll(argv[a + 2]) * 0xD1B54A32D192ED03ULL; if (!rng_state) rng_state = 7; a += 2; }
+        else if (!strcmp(argv[a], "knuth") && a + 2 < argc) { knuth_mode = atoi(argv[a + 1]); rng_state ^= (u64)atoll(argv[a + 2]) * 0xA0761D6478BD642FULL; if (!rng_state) rng_state = 3; a += 2; }
+        else if (!strcmp(argv[a], "solve")) { knuth_solve = 1; }
+        else if (!strcmp(argv[a], "pz4")) { knuth_pz4 = 1; }
         else if (!strcmp(argv[a], "debug") && a + 2 < argc) { debugN = atoll(argv[a + 1]); fdbg = fopen(argv[a + 2], "w"); a += 2; }
     }
     for (int i = 0; i < 17; i++) if (fscanf(f, "%d", &Y1[i]) != 1) return 1;
@@ -1203,6 +1376,7 @@ int main(int argc, char **argv) {
     }
     fclose(f);
     usab = calloc(1u << 17, 1); amask = calloc(1u << 17, sizeof(int *)); namask = calloc(1u << 17, sizeof(int));
+    ptr_c = calloc(1u << 17, sizeof(PTrip *)); ptr_n = calloc(1u << 17, sizeof(int));
     cvec = calloc(1u << 17, sizeof(signed char *)); ncvec = calloc(1u << 17, sizeof(int));
     int k = 0;
     for (int c = 0; c < 7; c++) for (int d = c + 1; d < 7; d++) { CC[k] = c; CD[k] = d; k++; }
@@ -1255,6 +1429,43 @@ int main(int argc, char **argv) {
             printf("\n");
         }
         fclose(ft);
+        return 0;
+    }
+    if (knuth_mode) {
+        double sw = 0, sw2 = 0, wz = 0, wz2 = 0, ws = 0, ws2 = 0, wsec = 0, wsec2 = 0, wdepth[8] = {0}, wpass = 0, wpass2 = 0;
+        long long nleaf = 0, nsurv = 0;
+        time_t t0 = time(NULL);
+        for (int k = 1; k <= knuth_mode; k++) {
+            int cls; double secs;
+            double w = knuth_walk(parts, ncl, &cls, &secs, wdepth);
+            sw += w; sw2 += w * w;
+            if (cls >= 1) nleaf++;
+            if (cls >= 1 && !kn_firstfail) { wpass += w; wpass2 += w * w; }
+            double z = (cls >= 2) ? w : 0.0;       /* leaves reaching the integer solver (z4 survivors) */
+            wz += z; wz2 += z * z;
+            double sv = (cls == 3) ? w : 0.0;      /* found / limit */
+            ws += sv; ws2 += sv * sv;
+            double tt = w * secs; wsec += tt; wsec2 += tt * tt;
+            if (k == knuth_mode || (k & (k - 1)) == 0) {
+                double n = k, m = sw / n, se = sqrt(fmax(sw2 / n - m * m, 0) / n);
+                double mz = wz / n, sez = sqrt(fmax(wz2 / n - mz * mz, 0) / n);
+                double mt = wsec / n, set = sqrt(fmax(wsec2 / n - mt * mt, 0) / n);
+                printf("walks %d leaves_est %.4g (se %.2g) reached %lld", k, m, se, nleaf);
+                if (knuth_solve) printf(" | z4surv_est %.4g (se %.2g) found/limit_est %.3g | proc_secs_est %.4g (se %.2g)", mz, sez, ws / n, mt, set);
+                printf(" | depth:");
+                for (int L = 1; L < 7; L++) printf(" %.3g", wdepth[L] / n);
+                if (knuth_pz4) {
+                    double mp = wpass / n, sep = sqrt(fmax(wpass2 / n - mp * mp, 0) / n);
+                    printf(" | pz4 kills:");
+                    for (int L = 2; L < 7; L++) printf(" %.3g", kn_pzkill[L] / n);
+                    printf(" secs:");
+                    for (int L = 2; L < 7; L++) printf(" %.3g", kn_pzsec[L] / n);
+                    printf(" leaves passing all pz4 %.4g (se %.2g)", mp, sep);
+                }
+                printf(" (%lds)%c", (long)(time(NULL) - t0), 10);
+                fflush(stdout);
+            }
+        }
         return 0;
     }
     t_start = t_last = time(NULL);

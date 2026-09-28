@@ -71,8 +71,35 @@ Labels: PROVEN / DERIVED / PATTERN (sampled). Nothing here counts as an exclusio
 - Partial Z4 inside stage A: pair 7 goes from 45 s to more than 300 s, because rebuilding partial domains at every deep node is too costly.
 - Splitting by feasible M, with a fixed-order search per M: 23× slower than AC plus dynamic ordering on the full domains.
 
-## Scale
+- Partial Z4 as a pruning test (28/09, measured with the Knuth walks, pair 0): at depths 2–5 it kills about 1% of nodes.
+  - Even at depth 6 it kills only ~1% when the refined L1 is left out.
+  - So the full Z4 kill (97% of distinct leaves) comes from the refined L1 on weight-2 cells.
+  - L1 needs the complete columns, i.e. the last row, so it cannot prune earlier.
 
-- Pair 0 has 13 top-level branches and pair 4 has 23. After 1–3 minutes each is still in its first branch, with 10–15k distinct skeletons.
-- Estimate: 10⁵–10⁶ distinct skeletons per pair.
-- PASS 2 at about 3–15 distinct skeletons per second per thread means hours to days per pair. More threads, or a lemma built from the AC cores, would change that.
+## Scale (Knuth estimates, 28/09 ~06:40, PATTERN)
+
+- Mode `knuth NW seed` of z17pipe (z17pipe20.exe): random root-to-leaf walks of stage A, one child drawn uniformly per level.
+  The product of the branching factors is an unbiased estimate of the leaf count.
+- 8192 walks per pair, a few ms each. Counts are stage-A leaves including S₇ duplicates (observed dup rate 80–99%).
+
+| pair | leaves (se) | per-depth nodes, depths 1–5 |
+|---|---|---|
+| 0 | 1.7e8 (9e6) | 13, 164, 5.1e3, 2.8e5, 1.5e7 |
+| 1 | 1.6e10 (1.5e9) | 46, 2.4e3, 2.1e5, 2.6e7, 1.3e9 |
+| 2 | 7.2e9 (1.3e9) | 63, 4.2e3, 4.5e5, 6.0e7, 1.4e9 |
+| 3 | 2.3e6 (8e5) | 29, 763, 1.7e4, 5.2e5, 2.2e6 |
+| 4 | 5.4e7 (9e6) | 23, 554, 1.9e4, 9.8e5, 1.8e7 |
+| 5 | 3.6e6 (1.1e6) | 42, 1.6e3, 2.8e4, 6.1e5, 6.7e6 |
+| 6 | 4.4e5 (1e5) | 29, 782, 1.9e4, 5.8e5, 2.4e6 |
+| 7 | 0 | 32, 723, 737, 2.8e3, 1.2e4 (matches COMPUTED) |
+
+- Throughput of z17pipe19 in real runs: pair 0 ~250 leaves/s, pair 6 ~50 leaves/s (99% duplicates, canon-bound).
+  - Of the distinct skeletons in pair 0, 97% die in the exact Z4 test.
+  - The integer solver spends ~0.6 s on each Z4 survivor; pairs 4–6 average ~1 s per skeleton.
+- So on one thread:
+  - pairs 6 and 3: hours;
+  - pair 5: about a day;
+  - pairs 4 and 0: days to a week;
+  - pairs 1 and 2: years.
+- Better dedupe and a φ-tree solver are worth ~2–10×. That is not enough for pairs 1 and 2: they need a lemma that cuts the skeleton tree.
+- The old estimate "10⁵–10⁶ distinct skeletons per pair" was wrong for pairs 0, 1, 2 and 4.
