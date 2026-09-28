@@ -71,10 +71,30 @@ Labels: PROVEN / DERIVED / PATTERN (sampled). Nothing here counts as an exclusio
 - Partial Z4 inside stage A: pair 7 goes from 45 s to more than 300 s, because rebuilding partial domains at every deep node is too costly.
 - Splitting by feasible M, with a fixed-order search per M: 23× slower than AC plus dynamic ordering on the full domains.
 
-- Partial Z4 as a pruning test (28/09, measured with the Knuth walks, pair 0): at depths 2–5 it kills about 1% of nodes.
-  - Even at depth 6 it kills only ~1% when the refined L1 is left out.
-  - So the full Z4 kill (97% of distinct leaves) comes from the refined L1 on weight-2 cells.
-  - L1 needs the complete columns, i.e. the last row, so it cannot prune earlier.
+- Partial Z4 as a pruning test (28/09): at depths 2–5 it killed about 1% of nodes on a 16-walk sample, so it is useless.
+  - WITHDRAWN (28/09 ~09:10): the claim that "without L1 even the full test kills ~1%, so L1 does the work". It rested on those
+    16 walks and on a test that is not equivalent to z4_ok.
+
+## Correction (28/09 ~09:10): the Z4 kill rate on ℤ¹⁷
+
+- The "97% of distinct skeletons killed by Z4" (pair 0) came from the first ~1% of the tree in DFS order, so it is biased.
+- Unbiased Knuth estimates:
+  - pair 0: 77% of leaves pass Z4 (2048 walks, se ~12%);
+  - pairs 1 and 2: 46–87% pass, depending on the sample.
+- So on ℤ¹⁷ most leaves need the integer stage.
+
+## Sol's short-dual-class lemma (DC, PROVEN; proof read by structures) on ℤ¹⁷
+
+- Implemented as a stage-A prefix filter (`dc` flag, z17pipe22+). The forbidden classes are {[7κ] : 7|κ|² ∈ {2,4,6,8,10,14}}:
+  41–84 per pair, i.e. all weight-2 classes plus O1\{i} and O2\{i}.
+- The Knuth leaf estimates are unchanged within ±5% for every pair: on ℤ¹⁷ DC cuts about 1×.
+  (C1's types: about 9× on A11E6⁺ #0, 2× on E7²⁺ #20, ~100× on D8²⁺ #26.)
+- Class-energy extension (`ce N` flag, leaf level). For every κ with [7κ] in the span:
+  - the congruence (κ,w_u) ≡ −t·r_u (mod 4);
+  - the budget Σ s_u² = (n + 3|t|²)/4, using per-cell minima over the real domains, with λ = 0.
+  It killed 0 of the sampled Z4 survivors. It needs Sol's λ (the star sums), and it only bites at slack ≤ 1, which is rare on ℤ¹⁷.
+- Remark: PE is exactly Sol's inequality (IB) applied to x ∈ U_H with λ = 1_P, and DC is IB applied to the half-lifts.
+  Together they exhaust the single-vector IB arguments on U.
 
 ## Scale (Knuth estimates, 28/09 ~06:40, PATTERN)
 

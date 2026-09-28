@@ -36,6 +36,41 @@ static double probe_q = 1.0;
 static long maxtime = 0; static int stop_now = 0;
 
 static int pc(unsigned x) { return __builtin_popcount(x); }
+/* Short-dual-class obstruction (DC, Sol 28/09, proof read by structures): for kappa in K* with n = 7|kappa|^2 in
+   {2,4,6,8,10,14}, the class [7 kappa] in K/2K is not in rho(E) = span of the rows. Classes are built from gamma in Z^17 with
+   |gamma|^2 <= 4 (enough: reduce a_k = (gamma,y_k) to |a_k| <= 3, then 7|gamma|^2 = n + a1^2 + a2^2 <= 32).
+   [7 kappa] = [gamma - a1 y1 - a2 y2] mod 2. */
+static unsigned char *dcB = NULL; static int use_dc = 0; static long long dc_prunes = 0, dc_count = 0;
+static int dcY1[17], dcY2[17], dcO1 = 0, dcO2 = 0;
+static void dc_rec(int i, int *g, int nrm) {
+    if (i == 17) {
+        if (!nrm) return;
+        int a1 = 0, a2 = 0, odd = 0;
+        for (int j = 0; j < 17; j++) { a1 += g[j] * dcY1[j]; a2 += g[j] * dcY2[j]; if (g[j] & 1) odd |= 1 << j; }
+        int n = 7 * nrm - a1 * a1 - a2 * a2;
+        if (n == 2 || n == 4 || n == 6 || n == 8 || n == 10 || n == 14) {
+            unsigned m = (unsigned)odd;
+            if (a1 & 1) m ^= (unsigned)dcO1;
+            if (a2 & 1) m ^= (unsigned)dcO2;
+            if ((pc(m & (unsigned)dcO1) & 1) || (pc(m & (unsigned)dcO2) & 1)) { fprintf(stderr, "DC: class not in K/2K\n"); exit(3); }
+            if (m && !(dcB[m >> 3] >> (m & 7) & 1)) { dcB[m >> 3] |= (unsigned char)(1 << (m & 7)); dc_count++; }
+        }
+        return;
+    }
+    for (int v = -2; v <= 2; v++) {
+        int nn = nrm + v * v;
+        if (nn > 4) continue;
+        g[i] = v; dc_rec(i + 1, g, nn);
+    }
+    g[i] = 0;
+}
+static void dc_build(const int *y1, const int *y2) {
+    dcB = calloc((1u << 17) / 8, 1);
+    for (int i = 0; i < 17; i++) { dcY1[i] = y1[i]; dcY2[i] = y2[i]; if (y1[i] & 1) dcO1 |= 1 << i; if (y2[i] & 1) dcO2 |= 1 << i; }
+    int g[17] = {0};
+    dc_rec(0, g, 0);
+}
+static int dc_hit(unsigned m) { return dcB[m >> 3] >> (m & 7) & 1; }
 static double urand(void) { rng_state ^= rng_state << 13; rng_state ^= rng_state >> 7; rng_state ^= rng_state << 17; return (rng_state >> 11) * (1.0 / 9007199254740992.0); }
 static int canon7(int x) { return (x & 1) ? (x ^ 127) : x; }
 
@@ -463,6 +498,127 @@ static void zfilter(void) {
         ndom[X] = m;
         st_zfilt_out += m;
     }
+}
+
+/* Class-energy test (CE, structures 28/09, from Sol's lifting argument): for kappa in K* with class [7 kappa] = rho(xi) in the
+   span of the rows, there is x in U with P_W x = kappa/2 and h-pairings t (t_c = +-1 on supp xi, 0/+-2 outside with at most
+   floor((7-l)/2) entries +-2). Then s_u = ((kappa,w_u) + t.r_u)/4 is an integer for every u and sum_u s_u^2 = (n + 3|t|^2)/4,
+   n = 7|kappa|^2. For w in K, (kappa,w) = (gamma,w) with gamma any lift. Test: for some admissible t, the sum over cells of
+   the minimal cell cost is <= the budget; otherwise the skeleton is dead. */
+static int use_ce = 0, ce_nmax = 22;
+static int nkap = 0, kapcap = 0; static signed char (*kapG)[17] = NULL; static int *kapN = NULL; static unsigned *kapC = NULL;
+static int *kapHead = NULL, *kapNext = NULL;
+static long long st_ce_calls = 0, st_ce_kill = 0;
+static u64 *kapKeyTab = NULL; static int kapKeyCap = 0;
+static void ce_add(const int *g, int n, unsigned c, const int *k7) {
+    /* dedupe by 7 kappa (integer vector) */
+    u64 h = 1469598103934665603ULL;
+    for (int i = 0; i < 17; i++) { h ^= (u64)(k7[i] + 1000); h *= 1099511628211ULL; }
+    if (!h) h = 1;
+    int pos = (int)(h & (u64)(kapKeyCap - 1));
+    while (kapKeyTab[pos]) { if (kapKeyTab[pos] == h) return; pos = (pos + 1) & (kapKeyCap - 1); }
+    kapKeyTab[pos] = h;
+    if (nkap == kapcap) { kapcap = kapcap ? 2 * kapcap : 4096; kapG = realloc(kapG, sizeof(*kapG) * (size_t)kapcap); kapN = realloc(kapN, sizeof(int) * (size_t)kapcap); kapC = realloc(kapC, sizeof(unsigned) * (size_t)kapcap); kapNext = realloc(kapNext, sizeof(int) * (size_t)kapcap); }
+    for (int i = 0; i < 17; i++) kapG[nkap][i] = (signed char)g[i];
+    kapN[nkap] = n; kapC[nkap] = c; kapNext[nkap] = kapHead[c]; kapHead[c] = nkap; nkap++;
+}
+static int ceY1[17], ceY2[17], ceO1 = 0, ceO2 = 0;
+static void ce_rec(int i, int *g, int nrm, int gmax) {
+    if (i == 17) {
+        if (!nrm) return;
+        int a1 = 0, a2 = 0, odd = 0;
+        for (int j = 0; j < 17; j++) { a1 += g[j] * ceY1[j]; a2 += g[j] * ceY2[j]; if (g[j] & 1) odd |= 1 << j; }
+        if (a1 < -3 || a1 > 3 || a2 < -3 || a2 > 3) return;            /* reduced representatives suffice */
+        int n = 7 * nrm - a1 * a1 - a2 * a2;
+        if (n < 1 || n > ce_nmax || (n & 1)) return;                    /* classes in E0 have even n (n = l mod 4) */
+        unsigned c = (unsigned)odd;
+        if (a1 & 1) c ^= (unsigned)ceO1;
+        if (a2 & 1) c ^= (unsigned)ceO2;
+        if (!c) return;
+        int k7[17];
+        for (int j = 0; j < 17; j++) k7[j] = 7 * g[j] - a1 * ceY1[j] - a2 * ceY2[j];
+        ce_add(g, n, c, k7);
+        return;
+    }
+    for (int v = -3; v <= 3; v++) {
+        int nn = nrm + v * v;
+        if (nn > gmax) continue;
+        g[i] = v; ce_rec(i + 1, g, nn, gmax);
+    }
+    g[i] = 0;
+}
+static void ce_build(const int *y1, const int *y2) {
+    for (int i = 0; i < 17; i++) { ceY1[i] = y1[i]; ceY2[i] = y2[i]; if (y1[i] & 1) ceO1 |= 1 << i; if (y2[i] & 1) ceO2 |= 1 << i; }
+    kapHead = malloc(sizeof(int) * (1u << 17));
+    for (unsigned c = 0; c < (1u << 17); c++) kapHead[c] = -1;
+    kapKeyCap = 1 << 22; kapKeyTab = calloc((size_t)kapKeyCap, sizeof(u64));
+    int gmax = (ce_nmax + 18) / 7;                                      /* 7|gamma|^2 = n + a1^2 + a2^2 */
+    int g[17] = {0};
+    ce_rec(0, g, 0, gmax);
+    free(kapKeyTab); kapKeyTab = NULL;
+}
+static int ce_dv[20000];
+static int ce_test(const unsigned *rw) {
+    st_ce_calls++;
+    static int tab[NC][9][9];
+    for (int msk = 1; msk < 64; msk++) {
+        unsigned c = 0;
+        for (int r = 1; r <= 6; r++) if (msk >> (r - 1) & 1) c ^= rw[r];
+        int T = msk << 1;                                                /* vertex bits 1..6 */
+        if (pc((unsigned)msk) & 1) T |= 1;                               /* xi has even weight */
+        int l = pc((unsigned)T), jmax = (7 - l) / 2;
+        for (int k = kapHead[c]; k >= 0; k = kapNext[k]) {
+            const signed char *gm = kapG[k];
+            int n = kapN[k];
+            /* per-cell cost tables over (tau+, tau-) in [-4,4]^2 */
+            for (int X = 0; X < NC; X++) {
+                for (int a = 0; a < 9; a++) for (int b = 0; b < 9; b++) tab[X][a][b] = 1 << 20;
+                const signed char *W = cv[X];
+                for (int v = 0; v < ncv[X]; v++) { int d = 0; for (int i = 0; i < 17; i++) d += gm[i] * W[17 * v + i]; ce_dv[v] = d; }
+                static unsigned char seen[32][32];
+                memset(seen, 0, sizeof seen);
+                for (int e = 0; e < ndom[X]; e++) {
+                    int gp = ce_dv[ipair[X][2 * e]], gq = ce_dv[ipair[X][2 * e + 1]];
+                    if (seen[gp + 16][gq + 16]) continue;
+                    seen[gp + 16][gq + 16] = 1;
+                    for (int tp = -4; tp <= 4; tp++) {
+                        if (((gp + tp) % 4 + 4) % 4) continue;
+                        int sp = (gp + tp) / 4;
+                        for (int tq = -4; tq <= 4; tq++) {
+                            if (((gq + tq) % 4 + 4) % 4) continue;
+                            int sq = (gq + tq) / 4, cost = sp * sp + sq * sq;
+                            if (cost < tab[X][tp + 4][tq + 4]) tab[X][tp + 4][tq + 4] = cost;
+                        }
+                    }
+                }
+            }
+            /* enumerate admissible t: +-1 on T, 0/+-2 outside with at most jmax entries +-2 */
+            int outv[7], no = 0, inv[7], ni = 0;
+            for (int v = 0; v < 7; v++) { if (T >> v & 1) inv[ni++] = v; else outv[no++] = v; }
+            int ok = 0;
+            int t[7];
+            for (int ds = 0; ds < (1 << ni) && !ok; ds++) {
+                for (int q = 0; q < ni; q++) t[inv[q]] = (ds >> q & 1) ? -1 : 1;
+                int p3 = 1; for (int q = 0; q < no; q++) p3 *= 3;
+                for (int os = 0; os < p3 && !ok; os++) {
+                    int x = os, j = 0;
+                    for (int q = 0; q < no; q++) { int dgt = x % 3; x /= 3; t[outv[q]] = dgt == 0 ? 0 : (dgt == 1 ? 2 : -2); if (dgt) j++; }
+                    if (j > jmax) continue;
+                    int tt = 0; for (int v = 0; v < 7; v++) tt += t[v] * t[v];
+                    int budget4 = n + 3 * tt;                          /* 4 * budget */
+                    if (budget4 % 4) continue;
+                    int budget = budget4 / 4, sum = 0;
+                    for (int X = 0; X < NC && sum <= budget; X++) {
+                        int cc = CC[X], dd = CD[X];
+                        sum += tab[X][t[cc] + t[dd] + 4][t[cc] - t[dd] + 4];
+                    }
+                    if (sum <= budget) ok = 1;
+                }
+            }
+            if (!ok) { st_ce_kill++; return 0; }
+        }
+    }
+    return 1;
 }
 
 /* plain DFS (sbdfs.c) */
@@ -990,7 +1146,7 @@ static int nrows;
 /* Knuth estimator of the stage-A tree (mode "knuth NW seed [solve]"): random root-to-leaf walks, one child drawn uniformly
    per level by reservoir sampling; the product of the branching factors is an unbiased estimate of the number of leaves. */
 static int knuth_mode = 0, knuth_solve = 0, knuth_pz4 = 0;
-static double kn_pzkill[8], kn_pzsec[8];
+static double kn_pzkill[8], kn_pzsec[8], kn_cekill = 0;
 static int kn_firstfail;
 static long long kn_cnt[8]; static unsigned kn_m[8]; static Part kn_parts[8][64]; static int kn_np[8];
 
@@ -1061,6 +1217,7 @@ static void leaf(void) {
         goto progress;
     }
     if (bok && use_z4 && use_zfilter) zfilter();
+    if (bok && use_ce && !ce_test(rows)) { free_common_dom(); goto progress; }
     if (!bok) {
         st_empty++;
         if (fdbg && st_proc <= debugN) { for (int i = 0; i < 17; i++) fprintf(fdbg, "%02x", cols[i]); fprintf(fdbg, " EMPTY 0\n"); }
@@ -1125,6 +1282,13 @@ static void choose(Part *parts, int np, int a, int wt, unsigned forced) {
         if ((pc(m & (unsigned)O1) & 1) || (pc(m & (unsigned)O2) & 1)) return;
         if (!usable(m)) return;
         for (int r = 1; r < c; r++) { int d = pc(m ^ rows[r]); if (!GOOD(d) || (c >= 2 && d < w2) || !usable(m ^ rows[r])) return; }
+        if (use_dc) {
+            for (int msk = 0; msk < (1 << (c - 1)); msk++) {
+                unsigned sp = m;
+                for (int r = 1; r < c; r++) if (msk >> (r - 1) & 1) sp ^= rows[r];
+                if (dc_hit(sp)) { dc_prunes++; return; }
+            }
+        }
         if (c == 1) {                          /* top-level branch: work split across machines */
             if (toponly) { top_total++; return; }
             long long tc = top_counter++;
@@ -1319,6 +1483,8 @@ static double knuth_walk(Part *parts0, int np0, int *cls, double *secs, double *
     if (!build(rows, cols)) { *secs = (double)(clock() - c0) / CLOCKS_PER_SEC; return w; }
     if (use_z4 && !z4_ok(rows)) { free_common_dom(); *secs = (double)(clock() - c0) / CLOCKS_PER_SEC; return w; }
     if (use_z4 && use_zfilter) zfilter();
+    if (use_ce && !ce_test(rows)) { free_common_dom(); *secs = (double)(clock() - c0) / CLOCKS_PER_SEC; *cls = 4; return w; }
+    if (knuth_solve == 2) { free_common_dom(); *secs = (double)(clock() - c0) / CLOCKS_PER_SEC; *cls = 5; return w; }
     prep_common();
     long long nd; int r = solve_plain(2000, &nd);
     if (r == 2) r = solve_bits(heavycap, &nd);
@@ -1347,7 +1513,10 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "probe") && a + 2 < argc) { probe_q = atof(argv[a + 1]); rng_state ^= (u64)atoll(argv[a + 2]) * 0xD1B54A32D192ED03ULL; if (!rng_state) rng_state = 7; a += 2; }
         else if (!strcmp(argv[a], "knuth") && a + 2 < argc) { knuth_mode = atoi(argv[a + 1]); rng_state ^= (u64)atoll(argv[a + 2]) * 0xA0761D6478BD642FULL; if (!rng_state) rng_state = 3; a += 2; }
         else if (!strcmp(argv[a], "solve")) { knuth_solve = 1; }
+        else if (!strcmp(argv[a], "nosolve")) { knuth_solve = 2; }
+        else if (!strcmp(argv[a], "ce") && a + 1 < argc) { use_ce = 1; ce_nmax = atoi(argv[a + 1]); a += 1; }
         else if (!strcmp(argv[a], "pz4")) { knuth_pz4 = 1; }
+        else if (!strcmp(argv[a], "dc")) { use_dc = 1; }
         else if (!strcmp(argv[a], "debug") && a + 2 < argc) { debugN = atoll(argv[a + 1]); fdbg = fopen(argv[a + 2], "w"); a += 2; }
     }
     for (int i = 0; i < 17; i++) if (fscanf(f, "%d", &Y1[i]) != 1) return 1;
@@ -1375,6 +1544,8 @@ int main(int argc, char **argv) {
         }
     }
     fclose(f);
+    if (use_dc) { dc_build(Y1, Y2); printf("DC: %lld forbidden classes%c", dc_count, 10); fflush(stdout); }
+    if (use_ce) { ce_build(Y1, Y2); printf("CE: %d short dual vectors with n <= %d%c", nkap, ce_nmax, 10); fflush(stdout); }
     usab = calloc(1u << 17, 1); amask = calloc(1u << 17, sizeof(int *)); namask = calloc(1u << 17, sizeof(int));
     ptr_c = calloc(1u << 17, sizeof(PTrip *)); ptr_n = calloc(1u << 17, sizeof(int));
     cvec = calloc(1u << 17, sizeof(signed char *)); ncvec = calloc(1u << 17, sizeof(int));
@@ -1441,7 +1612,8 @@ int main(int argc, char **argv) {
             sw += w; sw2 += w * w;
             if (cls >= 1) nleaf++;
             if (cls >= 1 && !kn_firstfail) { wpass += w; wpass2 += w * w; }
-            double z = (cls >= 2) ? w : 0.0;       /* leaves reaching the integer solver (z4 survivors) */
+            double z = (cls >= 2) ? w : 0.0;       /* z4 survivors (reach CE / the integer solver) */
+            if (cls == 4) { kn_cekill += w; }
             wz += z; wz2 += z * z;
             double sv = (cls == 3) ? w : 0.0;      /* found / limit */
             ws += sv; ws2 += sv * sv;
@@ -1451,7 +1623,7 @@ int main(int argc, char **argv) {
                 double mz = wz / n, sez = sqrt(fmax(wz2 / n - mz * mz, 0) / n);
                 double mt = wsec / n, set = sqrt(fmax(wsec2 / n - mt * mt, 0) / n);
                 printf("walks %d leaves_est %.4g (se %.2g) reached %lld", k, m, se, nleaf);
-                if (knuth_solve) printf(" | z4surv_est %.4g (se %.2g) found/limit_est %.3g | proc_secs_est %.4g (se %.2g)", mz, sez, ws / n, mt, set);
+                if (knuth_solve) printf(" | z4surv_est %.4g (se %.2g) ce_kill_est %.4g found/limit_est %.3g | proc_secs_est %.4g (se %.2g)", mz, sez, kn_cekill / n, ws / n, mt, set);
                 printf(" | depth:");
                 for (int L = 1; L < 7; L++) printf(" %.3g", wdepth[L] / n);
                 if (knuth_pz4) {
@@ -1475,8 +1647,8 @@ int main(int argc, char **argv) {
     dfs(parts, ncl);
     snprintf(fn, sizeof fn, "%s.stats", argv[2]);
     FILE *fs = fopen(fn, "w");
-    fprintf(fs, "{\"z4dead\": %lld, \"dup\": %lld, \"leaves\": %lld, \"processed\": %lld, \"empty\": %lld, \"root\": %lld, \"deeper\": %lld, \"heavy\": %lld, \"found\": %lld, \"limit\": %lld, \"m1_prunes\": %lld, \"nodes\": %lld, \"sample\": %g, \"part\": [%d, %d], \"seconds\": %ld}\n",
-            st_z4, st_dup, st_leaves, st_proc, st_empty, st_root, st_deeper, st_heavy, st_found, st_limit, m1_prunes, st_nodes, samp, part_r, part_m, (long)(time(NULL) - t_start));
+    fprintf(fs, "{\"ce\": %d, \"ce_calls\": %lld, \"ce_kill\": %lld, \"dc\": %d, \"dc_prunes\": %lld, \"z4dead\": %lld, \"dup\": %lld, \"leaves\": %lld, \"processed\": %lld, \"empty\": %lld, \"root\": %lld, \"deeper\": %lld, \"heavy\": %lld, \"found\": %lld, \"limit\": %lld, \"m1_prunes\": %lld, \"nodes\": %lld, \"sample\": %g, \"part\": [%d, %d], \"seconds\": %ld}\n",
+            use_ce ? ce_nmax : 0, st_ce_calls, st_ce_kill, use_dc, dc_prunes, st_z4, st_dup, st_leaves, st_proc, st_empty, st_root, st_deeper, st_heavy, st_found, st_limit, m1_prunes, st_nodes, samp, part_r, part_m, (long)(time(NULL) - t_start));
     fclose(fs); fclose(fsurv);
     if (fdbg) fclose(fdbg);
     printf("DONE leaves %lld processed %lld empty %lld root %lld deeper %lld heavy %lld found %lld limit %lld (%lds)\n",
