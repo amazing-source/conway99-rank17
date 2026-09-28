@@ -84,6 +84,9 @@ static int usable(unsigned S) {
 
 /* ---------------- stage B: domains and DFS ---------------- */
 static int CC[NC], CD[NC], ndom[NC], nwd[NC];
+static const signed char *cv[NC]; static int ncv[NC];     /* class vectors of the cell (shared cache) */
+static int *ipair[NC];                                    /* 2 indices per domain entry into cv[X] */
+static int dotbuf[2][20000];
 static signed char *dom[NC];
 static double *proj[NC];
 static u64 *kp[NC], *km[NC];
@@ -212,6 +215,7 @@ static int build(const unsigned *rows, const int *cols) {
         /* collect pairs */
         int capd = 1024, nd = 0;
         signed char *D = malloc((size_t)capd * 34);
+        int *IP = malloc(sizeof(int) * 2 * (size_t)capd);
         for (int p = 0; p < n; p++) {
             if (!keepv[p]) continue;
             int nk = need[p];
@@ -231,13 +235,14 @@ static int build(const unsigned *rows, const int *cols) {
                     if (!first_pos(b)) continue;
                     if (d == 1 && !first_pos(a)) continue;
                 }
-                if (nd == capd) { capd *= 2; D = realloc(D, (size_t)capd * 34); }
-                memcpy(D + 34 * nd, wp, 17); memcpy(D + 34 * nd + 17, wq, 17); nd++;
+                if (nd == capd) { capd *= 2; D = realloc(D, (size_t)capd * 34); IP = realloc(IP, sizeof(int) * 2 * (size_t)capd); }
+                memcpy(D + 34 * nd, wp, 17); memcpy(D + 34 * nd + 17, wq, 17);
+                IP[2 * nd] = p; IP[2 * nd + 1] = q; nd++;
             }
         }
-        dom[X] = D; ndom[X] = nd;
+        dom[X] = D; ndom[X] = nd; ipair[X] = IP; cv[X] = W; ncv[X] = n;
         if (!nd) {
-            for (int Z = 0; Z <= X; Z++) { free(dom[Z]); dom[Z] = NULL; }
+            for (int Z = 0; Z <= X; Z++) { free(dom[Z]); dom[Z] = NULL; free(ipair[Z]); ipair[Z] = NULL; }
             return 0;
         }
     }
@@ -261,13 +266,31 @@ static int try_plain(int k, int t, double R[15][15]) {
         if (yy == k) { Y = killer[k]; if (Y <= k || Y >= NC) continue; }
         else { Y = yy; if (Y == k || (Y == killer[k] && killer[k] > k)) continue; }
         int m = 0, *src = levi[k][Y], ns = levn[k][Y], *dst = levi[k + 1][Y];
+        int usevec = (4 * ns > 2 * ncv[Y]);
+        if (usevec) {
+            for (int j = 0; j < ncv[Y]; j++) {
+                const signed char *u = cv[Y] + 17 * j;
+                int g0 = 0, g1 = 0;
+                for (int i = 0; i < 17; i++) { g0 += w[i] * u[i]; g1 += w[17 + i] * u[i]; }
+                dotbuf[0][j] = g0; dotbuf[1][j] = g1;
+            }
+        }
         for (int q = 0; q < ns; q++) {
-            const signed char *u = dom[Y] + 34 * src[q];
             int ok = 1;
-            for (int a = 0; a < 2 && ok; a++) for (int b = 0; b < 2 && ok; b++) {
-                int g = rrt[k][Y][a][b];
-                for (int i = 0; i < 17; i++) g += w[17 * a + i] * u[17 * b + i];
-                if (!(g == 0 || g == 4 || g == -4)) ok = 0;
+            if (usevec) {
+                int ip = ipair[Y][2 * src[q]], iq = ipair[Y][2 * src[q] + 1];
+                int g;
+                g = dotbuf[0][ip] + rrt[k][Y][0][0]; if (!(g == 0 || g == 4 || g == -4)) ok = 0;
+                if (ok) { g = dotbuf[0][iq] + rrt[k][Y][0][1]; if (!(g == 0 || g == 4 || g == -4)) ok = 0; }
+                if (ok) { g = dotbuf[1][ip] + rrt[k][Y][1][0]; if (!(g == 0 || g == 4 || g == -4)) ok = 0; }
+                if (ok) { g = dotbuf[1][iq] + rrt[k][Y][1][1]; if (!(g == 0 || g == 4 || g == -4)) ok = 0; }
+            } else {
+                const signed char *u = dom[Y] + 34 * src[q];
+                for (int a = 0; a < 2 && ok; a++) for (int b = 0; b < 2 && ok; b++) {
+                    int g = rrt[k][Y][a][b];
+                    for (int i = 0; i < 17; i++) g += w[17 * a + i] * u[17 * b + i];
+                    if (!(g == 0 || g == 4 || g == -4)) ok = 0;
+                }
             }
             if (ok) dst[m++] = src[q];
         }
@@ -425,7 +448,7 @@ static void prep_common(void) {
         }
     }
 }
-static void free_common(void) { for (int X = 0; X < NC; X++) { free(proj[X]); free(dom[X]); dom[X] = NULL; } }
+static void free_common(void) { for (int X = 0; X < NC; X++) { free(proj[X]); free(dom[X]); dom[X] = NULL; free(ipair[X]); ipair[X] = NULL; } }
 
 static int solve_plain(long long capv, long long *nodes_out) {
     for (int X = 0; X < NC; X++) {
@@ -461,20 +484,23 @@ static int solve_bits(long long capv, long long *nodes_out) {
             int P = L3v[v][pr == 0 ? 1 : 0], Q = L3v[v][pr == 2 ? 1 : 2];
             has3[v][pr] = 0; H3[v][pr] = NULL;
             if ((long long)ndom[P] * ndom[Q] > look3_cap) continue;
-            for (int a = 0; a < ndom[P]; a++) if (!rowdone[P][a]) compat_row(P, a);
             long long n = 3 * (long long)ndom[P] * ndom[Q] + 16;
             u64 *T = calloc((size_t)n * 2, sizeof(u64));
             for (int a = 0; a < ndom[P]; a++) {
-                const u64 *row = compat[P][Q] + (size_t)a * nwd[Q];
+                const signed char *wa = dom[P] + 34 * a;
                 int ca[17]; contrib(P, a, v, ca);
-                for (int w = 0; w < nwd[Q]; w++) {
-                    u64 x = row[w];
-                    while (x) {
-                        int bit = __builtin_ctzll(x); x &= x - 1;
-                        int cb[17], sm[17]; contrib(Q, 64 * w + bit, v, cb);
-                        for (int i = 0; i < 17; i++) sm[i] = ca[i] + cb[i];
-                        u64 lo, hi; key85(sm, &lo, &hi); h3_insert(T, n, lo, hi);
+                for (int b = 0; b < ndom[Q]; b++) {
+                    const signed char *wb = dom[Q] + 34 * b;
+                    int ok = 1;
+                    for (int s2 = 0; s2 < 2 && ok; s2++) for (int tt = 0; tt < 2 && ok; tt++) {
+                        int g = rrt[P][Q][s2][tt];
+                        for (int i = 0; i < 17; i++) g += wa[17 * s2 + i] * wb[17 * tt + i];
+                        if (!(g == 0 || g == 4 || g == -4)) ok = 0;
                     }
+                    if (!ok) continue;
+                    int cb[17], sm[17]; contrib(Q, b, v, cb);
+                    for (int i = 0; i < 17; i++) sm[i] = ca[i] + cb[i];
+                    u64 lo, hi; key85(sm, &lo, &hi); h3_insert(T, n, lo, hi);
                 }
             }
             H3[v][pr] = T; H3n[v][pr] = n; has3[v][pr] = 1;
