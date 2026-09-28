@@ -297,6 +297,10 @@ static long long st_z4 = 0;
 static unsigned bz[7];          /* bz[c], c=1..6: 24-bit basis masks (bits 0..6 e-part, 7..23 f-part) */
 static int Jz[7][7], kapz[7][7];
 static u64 SigZ[NC];            /* per cell: 64-bit set of 6-bit signatures */
+static unsigned char *sigE[NC];  /* per entry signature */
+static int use_zfilter = 1;
+static long long st_zfilt_in = 0, st_zfilt_out = 0, st_zM = 0;
+static u64 allowZ[NC];
 static int Mz[7];
 static int cellidx[7][7];
 static int z4_rec(int c) {
@@ -323,6 +327,7 @@ static int z4_ok(const unsigned *rows) {
     }
     for (int X = 0; X < NC; X++) {
         cellidx[CC[X]][CD[X]] = X;
+        free(sigE[X]); sigE[X] = malloc((size_t)(ndom[X] ? ndom[X] : 1));
         u64 S = 0;
         int c = CC[X], d = CD[X];
         for (int t = 0; t < ndom[X]; t++) {
@@ -336,11 +341,55 @@ static int z4_ok(const unsigned *rows) {
             int sig = 0;
             for (int e = 1; e <= 6; e++) if (pc(x & bz[e]) & 1) sig |= 1 << (e - 1);
             S |= 1ULL << sig;
+            sigE[X][t] = (unsigned char)sig;
         }
         SigZ[X] = S;
         (void)c; (void)d;
     }
     return z4_rec(1);
+}
+
+/* Z4 code-consistency filter: allowed signatures per cell = targets over ALL feasible M (sound: every solution lies in one Q_M) */
+static int zfM[7];
+static void zf_rec(int c) {
+    if (c == 7) {
+        st_zM++;
+        for (int X = 0; X < NC; X++) {
+            int cc = CC[X], dd = CD[X];
+            int tgt = (cc == 0) ? zfM[dd] : (zfM[cc] ^ zfM[dd] ^ kapz[cc][dd]);
+            allowZ[X] |= 1ULL << tgt;
+        }
+        return;
+    }
+    u64 S = SigZ[cellidx[0][c]];
+    while (S) {
+        int m = __builtin_ctzll(S); S &= S - 1;
+        int ok = 1;
+        for (int e = 1; e < c && ok; e++) if ((((m >> (e - 1)) & 1) ^ ((zfM[e] >> (c - 1)) & 1)) != Jz[c][e]) ok = 0;
+        for (int e = 1; e < c && ok; e++) { int v = zfM[e] ^ m ^ kapz[e][c]; if (!(SigZ[cellidx[e][c]] >> v & 1)) ok = 0; }
+        if (!ok) continue;
+        zfM[c] = m;
+        zf_rec(c + 1);
+    }
+}
+static void zfilter(void) {
+    for (int X = 0; X < NC; X++) allowZ[X] = 0;
+    zf_rec(1);
+    for (int X = 0; X < NC; X++) {
+        int m = 0;
+        st_zfilt_in += ndom[X];
+        for (int t = 0; t < ndom[X]; t++) {
+            if (!(allowZ[X] >> sigE[X][t] & 1)) continue;
+            if (m != t) {
+                memcpy(dom[X] + 34 * m, dom[X] + 34 * t, 34);
+                ipair[X][2 * m] = ipair[X][2 * t]; ipair[X][2 * m + 1] = ipair[X][2 * t + 1];
+                sigE[X][m] = sigE[X][t];
+            }
+            m++;
+        }
+        ndom[X] = m;
+        st_zfilt_out += m;
+    }
 }
 
 /* plain DFS (sbdfs.c) */
@@ -887,10 +936,12 @@ static void leaf(void) {
     tm_build += (double)(clock() - c0) / CLOCKS_PER_SEC;
     if (bok && use_z4 && !z4_ok(rows)) {
         st_z4++;
+        if (0) {}
         if (fdbg && st_proc <= debugN) { for (int i = 0; i < 17; i++) fprintf(fdbg, "%02x", cols[i]); fprintf(fdbg, " Z4DEAD 0%c", 10); }
         free_common_dom();
         goto progress;
     }
+    if (bok && use_z4 && use_zfilter) zfilter();
     if (!bok) {
         st_empty++;
         if (fdbg && st_proc <= debugN) { for (int i = 0; i < 17; i++) fprintf(fdbg, "%02x", cols[i]); fprintf(fdbg, " EMPTY 0\n"); }
@@ -932,8 +983,8 @@ static void leaf(void) {
 progress:
     if (time(NULL) - t_last >= 120) {
         t_last = time(NULL);
-        printf("  z4 %lld dup %lld | leaves %lld processed %lld empty %lld root %lld deeper %lld heavy %lld found %lld limit %lld m1_prunes %lld (%lds) t_build %.0f t_prep %.0f t_solve %.0f\n",
-               st_z4, st_dup, st_leaves, st_proc, st_empty, st_root, st_deeper, st_heavy, st_found, st_limit, m1_prunes, (long)(time(NULL) - t_start),
+        printf("  zf %lld->%lld (M %lld) z4 %lld dup %lld | leaves %lld processed %lld empty %lld root %lld deeper %lld heavy %lld found %lld limit %lld m1_prunes %lld (%lds) t_build %.0f t_prep %.0f t_solve %.0f\n",
+               st_zfilt_in, st_zfilt_out, st_zM, st_z4, st_dup, st_leaves, st_proc, st_empty, st_root, st_deeper, st_heavy, st_found, st_limit, m1_prunes, (long)(time(NULL) - t_start),
                tm_build, tm_prep, tm_solve);
         fflush(stdout);
     }
@@ -1006,6 +1057,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "noac")) { use_ac = 0; }
         else if (!strcmp(argv[a], "nodom")) { use_dom = 0; }
         else if (!strcmp(argv[a], "noz4")) { use_z4 = 0; }
+        else if (!strcmp(argv[a], "nozfilter")) { use_zfilter = 0; }
         else if (!strcmp(argv[a], "probe") && a + 2 < argc) { probe_q = atof(argv[a + 1]); rng_state ^= (u64)atoll(argv[a + 2]) * 0xD1B54A32D192ED03ULL; if (!rng_state) rng_state = 7; a += 2; }
         else if (!strcmp(argv[a], "debug") && a + 2 < argc) { debugN = atoll(argv[a + 1]); fdbg = fopen(argv[a + 2], "w"); a += 2; }
     }
@@ -1060,6 +1112,7 @@ int main(int argc, char **argv) {
             clock_t c0 = clock();
             if (!build(rw, cols)) { printf("EMPTY 0 0.0s%c", 10); continue; }
             if (use_z4 && !z4_ok(rw)) { printf("Z4DEAD 0 0.0s%c", 10); free_common_dom(); continue; }
+            if (use_z4 && use_zfilter) zfilter();
             prep_common();
             long long nd; int r = solve_plain(2000, &nd), tier = 1;
             if (r == 2) { r = solve_bits(heavycap, &nd); tier = 2; }
