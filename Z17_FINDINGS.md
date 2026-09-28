@@ -103,3 +103,14 @@ Labels: PROVEN / DERIVED / PATTERN (sampled). Nothing here counts as an exclusio
   - pairs 1 and 2: years.
 - Better dedupe and a φ-tree solver are worth ~2–10×. That is not enough for pairs 1 and 2: they need a lemma that cuts the skeleton tree.
 - The old estimate "10⁵–10⁶ distinct skeletons per pair" was wrong for pairs 0, 1, 2 and 4.
+- Knuth walks with full leaf processing (`knuth 512 seed solve`, z17pipe21, no dedupe; se ~30–70%):
+
+  | pair | leaves | leaves passing Z4 (share) | processing s (before dedupe) |
+  |---|---|---|---|
+  | 1 | 2.7e10 | 1.2e10 (46%) | 1.3e10 |
+  | 2 | 4.7e9 | 2.3e9 (48%) | 1.2e9 |
+  | 3 | 4.2e5 | 5.1e4 (12%) | 9.3e4 |
+  | 5 | 7.6e5 | 7.4e5 (97%) | 7.2e5 |
+
+  - The Z4 kill rate depends strongly on the pair: 97% for pair 0, but only about half for pairs 1 and 2.
+  - No sampled leaf was FOUND or LIMIT.
