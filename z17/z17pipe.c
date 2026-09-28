@@ -125,6 +125,36 @@ static int anybit(const u64 *b, int n);
 static long long st_sum3 = 0, st_acwipe = 0;
 static int use_ac = 1;
 /* compat[Y][X] for Y > X is not stored; revision of X by Y uses compat[X][Y] (X<Y) or the transpose test */
+static u64 *cmT[NC][NC];
+static int ac_bits(u64 **al) {
+    int changed = 1;
+    while (changed) {
+        changed = 0;
+        for (int X = 0; X < NC; X++)
+            for (int Y = 0; Y < NC; Y++) {
+                if (X == Y) continue;
+                for (int w = 0; w < nwd[X]; w++) {
+                    u64 x = al[X][w];
+                    while (x) {
+                        int bit = __builtin_ctzll(x); x &= x - 1;
+                        int t = 64 * w + bit, sup = 0;
+                        if (X < Y) {
+                            const u64 *row = compat[X][Y] + (size_t)t * nwd[Y];
+                            for (int i = 0; i < nwd[Y]; i++) if (row[i] & al[Y][i]) { sup = 1; break; }
+                        } else {
+                            const u64 *row = cmT[X][Y] + (size_t)t * nwd[Y];
+                            for (int i = 0; i < nwd[Y]; i++) if (row[i] & al[Y][i]) { sup = 1; break; }
+                        }
+                        if (!sup) { al[X][w] &= ~(1ULL << bit); changed = 1; }
+                    }
+                }
+                if (!anybit(al[X], nwd[X])) return 0;
+            }
+    }
+    return 1;
+}
+static long long st_zsac_codes = 0, st_zsac_acdead = 0, st_zsac_search = 0;
+static int use_zsac = 1;
 static int ac_full(void) {
     for (int X = 0; X < NC; X++) for (int t = 0; t < ndom[X]; t++) if (!rowdone[X][t]) compat_row(X, t);
     u64 *al[NC];
@@ -351,9 +381,20 @@ static int z4_ok(const unsigned *rows) {
 
 /* Z4 code-consistency filter: allowed signatures per cell = targets over ALL feasible M (sound: every solution lies in one Q_M) */
 static int zfM[7];
+#define ZMCAP 16384
+static unsigned char *zT = NULL;      /* nZM x NC targets */
+static int nZM = 0, zmOverflow = 0;
 static void zf_rec(int c) {
     if (c == 7) {
         st_zM++;
+        if (nZM < ZMCAP) {
+            if (!zT) zT = malloc((size_t)ZMCAP * NC);
+            for (int X = 0; X < NC; X++) {
+                int cc = CC[X], dd = CD[X];
+                zT[(size_t)nZM * NC + X] = (unsigned char)((cc == 0) ? zfM[dd] : (zfM[cc] ^ zfM[dd] ^ kapz[cc][dd]));
+            }
+            nZM++;
+        } else zmOverflow = 1;
         for (int X = 0; X < NC; X++) {
             int cc = CC[X], dd = CD[X];
             int tgt = (cc == 0) ? zfM[dd] : (zfM[cc] ^ zfM[dd] ^ kapz[cc][dd]);
@@ -374,6 +415,7 @@ static void zf_rec(int c) {
 }
 static void zfilter(void) {
     for (int X = 0; X < NC; X++) allowZ[X] = 0;
+    nZM = 0; zmOverflow = 0;
     zf_rec(1);
     for (int X = 0; X < NC; X++) {
         int m = 0;
@@ -469,7 +511,7 @@ static int rec_plain(int k, double R[15][15]) {
 static int anybit(const u64 *b, int n) { for (int i = 0; i < n; i++) if (b[i]) return 1; return 0; }
 static int rec_bits(int k, double R[15][15]);
 static int use_dom = 1;
-static u64 *cmT[NC][NC];                 /* cmT[Y][X] = rows over D_X for each value of Y, Y > X (transpose of compat[X][Y]) */
+/* cmT declared earlier: cmT[Y][X] = rows over D_X for each value of Y, Y > X (transpose of compat[X][Y]) */
 static u64 *dlev[NC + 1][NC];            /* alive bitsets per depth */
 static int assigned[NC];
 static int rec_dom(int depth, double R[15][15]);
@@ -787,8 +829,44 @@ static int solve_bits(long long capv, long long *nodes_out) {
         for (int L = 0; L <= NC; L++) for (int X = 0; X < NC; X++) {
             dlev[L][X] = calloc((size_t)nwd[X], sizeof(u64));
         }
-        for (int X = 0; X < NC; X++) { memcpy(dlev[0][X], levb[0][X], sizeof(u64) * (size_t)nwd[X]); assigned[X] = 0; }
-        r = rec_dom(0, R);
+        if (use_zsac && use_z4 && use_zfilter && nZM > 0 && !zmOverflow) {
+            /* per-code restriction: entries with the forced signature, then AC, then search (complete: each solution lies in one code) */
+            u64 *Eb[NC][64];
+            for (int X = 0; X < NC; X++) for (int sg = 0; sg < 64; sg++) Eb[X][sg] = NULL;
+            for (int X = 0; X < NC; X++) for (int t2 = 0; t2 < ndom[X]; t2++) {
+                int sg = sigE[X][t2];
+                if (!Eb[X][sg]) Eb[X][sg] = calloc((size_t)nwd[X], sizeof(u64));
+                Eb[X][sg][t2 >> 6] |= 1ULL << (t2 & 63);
+            }
+            u64 *al[NC];
+            for (int X = 0; X < NC; X++) al[X] = malloc(sizeof(u64) * (size_t)nwd[X]);
+            r = 0;
+            long long tot = 0;
+            for (int m = 0; m < nZM && r != 1; m++) {
+                int ok = 1;
+                for (int X = 0; X < NC && ok; X++) {
+                    const u64 *eb = Eb[X][zT[(size_t)m * NC + X]];
+                    if (!eb) { ok = 0; break; }
+                    u64 acc = 0;
+                    for (int i = 0; i < nwd[X]; i++) { al[X][i] = levb[0][X][i] & eb[i]; acc |= al[X][i]; }
+                    if (!acc) ok = 0;
+                }
+                st_zsac_codes++;
+                if (!ok || !ac_bits(al)) { st_zsac_acdead++; continue; }
+                st_zsac_search++;
+                for (int X = 0; X < NC; X++) { memcpy(dlev[0][X], al[X], sizeof(u64) * (size_t)nwd[X]); assigned[X] = 0; }
+                nodes = 0;
+                int rr2 = rec_dom(0, R);
+                tot += nodes;
+                if (rr2 == 1) r = 1;
+                else if (rr2 == 2 && r == 0) r = 2;
+            }
+            nodes = tot + 1;
+            for (int X = 0; X < NC; X++) { free(al[X]); for (int sg = 0; sg < 64; sg++) free(Eb[X][sg]); }
+        } else {
+            for (int X = 0; X < NC; X++) { memcpy(dlev[0][X], levb[0][X], sizeof(u64) * (size_t)nwd[X]); assigned[X] = 0; }
+            r = rec_dom(0, R);
+        }
         for (int L = 0; L <= NC; L++) for (int X = 0; X < NC; X++) free(dlev[L][X]);
         for (int X = 0; X < NC; X++) for (int Y = 0; Y < X; Y++) { free(cmT[X][Y]); cmT[X][Y] = NULL; }
     }
@@ -983,8 +1061,8 @@ static void leaf(void) {
 progress:
     if (time(NULL) - t_last >= 120) {
         t_last = time(NULL);
-        printf("  zf %lld->%lld (M %lld) z4 %lld dup %lld | leaves %lld processed %lld empty %lld root %lld deeper %lld heavy %lld found %lld limit %lld m1_prunes %lld (%lds) t_build %.0f t_prep %.0f t_solve %.0f\n",
-               st_zfilt_in, st_zfilt_out, st_zM, st_z4, st_dup, st_leaves, st_proc, st_empty, st_root, st_deeper, st_heavy, st_found, st_limit, m1_prunes, (long)(time(NULL) - t_start),
+        printf("  zsac codes %lld acdead %lld searched %lld | zf %lld->%lld (M %lld) z4 %lld dup %lld | leaves %lld processed %lld empty %lld root %lld deeper %lld heavy %lld found %lld limit %lld m1_prunes %lld (%lds) t_build %.0f t_prep %.0f t_solve %.0f\n",
+               st_zsac_codes, st_zsac_acdead, st_zsac_search, st_zfilt_in, st_zfilt_out, st_zM, st_z4, st_dup, st_leaves, st_proc, st_empty, st_root, st_deeper, st_heavy, st_found, st_limit, m1_prunes, (long)(time(NULL) - t_start),
                tm_build, tm_prep, tm_solve);
         fflush(stdout);
     }
@@ -1058,6 +1136,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "nodom")) { use_dom = 0; }
         else if (!strcmp(argv[a], "noz4")) { use_z4 = 0; }
         else if (!strcmp(argv[a], "nozfilter")) { use_zfilter = 0; }
+        else if (!strcmp(argv[a], "nozsac")) { use_zsac = 0; }
         else if (!strcmp(argv[a], "probe") && a + 2 < argc) { probe_q = atof(argv[a + 1]); rng_state ^= (u64)atoll(argv[a + 2]) * 0xD1B54A32D192ED03ULL; if (!rng_state) rng_state = 7; a += 2; }
         else if (!strcmp(argv[a], "debug") && a + 2 < argc) { debugN = atoll(argv[a + 1]); fdbg = fopen(argv[a + 2], "w"); a += 2; }
     }
