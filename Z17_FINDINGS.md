@@ -2,7 +2,8 @@
 
 Labels: PROVEN / DERIVED / PATTERN (sampled). Nothing here counts as an exclusion until PASS 2 finishes, except:
 - **Pair 7: COMPUTED, excluded at the skeleton level.** Its exhaustive stage A (PE + usability + incremental M1 + coverage) has 0 leaves (36 s).
-  An independent check is requested from C2.
+  C1's independent engine confirms it (28/09 ~05:30): no skeleton survives.
+- Pairs 0–6 are MOD4_FEASIBLE in C1's engine, so the integer search is needed. That is z17pipe19, PASS 2, running.
 
 ## Kill mechanisms (PATTERN, pairs 0, 1, 2, 4, 5)
 
