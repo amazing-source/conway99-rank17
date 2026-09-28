@@ -51,26 +51,30 @@
   - All reproduce the Python node counts exactly.
   - `sbdfs_g` was also tested in a random basis.
 
-## Status (28/09 ~04:40)
+## Status (28/09 ~07:05)
 
-### ℤ¹⁷
+**Verdict on scale.** Random-walk (Knuth) estimates of the skeleton trees show that enumeration cannot close the route. Full
+numbers are in `Z17_FINDINGS.md` (Scale) and in C1's notes/147. The route needs a lemma that cuts the tree; the question for
+ChatGPT is in `GPT_PROMPT_STAR1.md`.
 
-- **Pair 7: COMPUTED.** Exhaustive stage A has 0 skeletons.
-- **Pairs 0 and 6:** exhaustive PASS 2 running on `z17pipe17`, 0 survivors.
-  - Pipeline: stage A + incremental M1 + S₇ dedupe, then exact Z4, then the Z4 code-consistency filter, then plain DFS, then AC + the per-code AC split + dynamic-ordering bitset DFS.
-- **Queue:** pairs 1 and 2 after pair 0; pairs 3 and 5 after pair 6; pair 4 after pair 7's stats.
-- **Independent check:** C1 is running all 8 pairs through its engine (`c1_recherche`: `rank17_z4.c`).
+### ℤ¹⁷ (structures)
 
-### Other V's
+- **Pair 7: COMPUTED** (0 skeletons).
+- **Running** (`z17pipe19`, 0 survivors so far):
+  - pair 6 (~4·10⁵ leaves, a few hours);
+  - pair 5 (~1 day);
+  - pair 3 queued after pair 6.
+- Pairs 0 and 4 would take days (~10⁸ and ~5·10⁷ leaves).
+- Pairs 1 and 2 are out of reach: ~10¹⁰ leaves each, about half of them Z4-feasible.
 
-- **C1's engine** (PASS 2, exhaustive):
-  - canonical skeleton enumeration under W(R_K), with the pointwise stabiliser chain;
-  - the exact Z4 test on partial and full skeletons.
-  - A11E6⁺ #31 (10¹⁰ raw skeletons) is decided in 4 s. E8²⊕ℤ is fully excluded.
-  - All 1,053 pairs of C1's 6 V's are expected in about 2 h.
-- **C2 (E₈⊕ℤ⁹, D₁₂⁺⊕ℤ⁵):** PATTERN-dead so far, using LP + AC + MITM.
-  - D₁₂⁺ is AC-resistant: there the frame rows are needed.
-  - The lab PC has no compiler.
+### Other V's (C1's engine `rank17_z4.c`, exact Z4 on partial and full skeletons)
+
+- **Closed (COMPUTED):** E8²⊕ℤ 12/12 and D16⁺⊕ℤ 18/18.
+- **C1's other types:** 51 pairs EXCLUDED of 1,053. The 1,002 MOD4_FEASIBLE pairs have trees of 4.5·10⁴–1.1·10¹² leaves.
+- **E8⊕ℤ⁹ and D12⁺⊕ℤ⁵** (structures, running C1's driver after C2 was turned off):
+  - E8: 3 EXCLUDED (#0, 3, 4), 50 MOD4_FEASIBLE;
+  - D12⁺: 4 EXCLUDED (#1, 7, 16, 31), 154 MOD4_FEASIBLE.
+- **Total:** 59 of 1,272 y-pairs EXCLUDED. Everything else is PATTERN (no survivor anywhere) until the lemma exists.
 
 ### Key lemma material
 
