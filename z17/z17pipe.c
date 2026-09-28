@@ -367,6 +367,126 @@ static int rec_plain(int k, double R[15][15]) {
 /* bitset DFS (sbdfs3.c) */
 static int anybit(const u64 *b, int n) { for (int i = 0; i < n; i++) if (b[i]) return 1; return 0; }
 static int rec_bits(int k, double R[15][15]);
+static int use_dom = 1;
+static u64 *cmT[NC][NC];                 /* cmT[Y][X] = rows over D_X for each value of Y, Y > X (transpose of compat[X][Y]) */
+static u64 *dlev[NC + 1][NC];            /* alive bitsets per depth */
+static int assigned[NC];
+static int rec_dom(int depth, double R[15][15]);
+static const u64 *crow(int X, int Y, int t) {     /* bitset over D_Y of values compatible with X = t */
+    if (X < Y) return compat[X][Y] + (size_t)t * nwd[Y];
+    return cmT[X][Y] + (size_t)t * nwd[Y];
+}
+static int popc(const u64 *b, int n) { int c = 0; for (int i = 0; i < n; i++) c += __builtin_popcountll(b[i]); return c; }
+static void starsum_dom(int v, int *s) {
+    memset(s, 0, 17 * sizeof(int));
+    for (int x = 0; x < NC; x++) {
+        if (!assigned[x]) continue;
+        const signed char *w = dom[x] + 34 * chosen[x];
+        if (CC[x] == v) for (int i = 0; i < 17; i++) s[i] += w[i] + w[17 + i];
+        else if (CD[x] == v) for (int i = 0; i < 17; i++) s[i] += w[i] - w[17 + i];
+    }
+}
+static int try_dom(int depth, int X, int t, double R[15][15]) {
+    const double *pv = proj[X] + 30 * t;
+    double R2[15][15];
+    for (int i = 0; i < 15; i++) for (int j = 0; j < 15; j++) R2[i][j] = R[i][j] - pv[i] * pv[j] - pv[15 + i] * pv[15 + j];
+    for (int i = 0; i < 15; i++) if (R2[i][i] < -1e-7) return 0;
+    if (!psd_ok(R2)) return 0;
+    chosen[X] = t; assigned[X] = 1;
+    int s[17], res = 0;
+    for (int v = 0; v < 7; v++) {                        /* star closure for vertices now complete */
+        if (CC[X] != v && CD[X] != v) continue;
+        int open = 0;
+        for (int Y = 0; Y < NC; Y++) if ((CC[Y] == v || CD[Y] == v) && !assigned[Y]) open++;
+        if (!open) { starsum_dom(v, s); for (int i = 0; i < 17; i++) if (s[i]) goto out; }
+    }
+    for (int Y = 0; Y < NC; Y++) {
+        if (assigned[Y]) continue;
+        const u64 *cm = crow(X, Y, t);
+        u64 *src = dlev[depth][Y], *dst = dlev[depth + 1][Y], acc = 0;
+        for (int i = 0; i < nwd[Y]; i++) { dst[i] = src[i] & cm[i]; acc |= dst[i]; }
+        if (!acc) goto out;
+    }
+    for (int v = 0; v < 7; v++) {                        /* star look-ahead with 1 or 2 open cells */
+        int op[2], cnt = 0;
+        for (int Y = 0; Y < NC; Y++) if ((CC[Y] == v || CD[Y] == v) && !assigned[Y]) { if (cnt < 2) op[cnt] = Y; cnt++; }
+        if (cnt == 1) {
+            int Y = op[0];
+            starsum_dom(v, s);
+            u64 *b = dlev[depth + 1][Y];
+            for (int w = 0; w < nwd[Y]; w++) {
+                u64 x = b[w];
+                while (x) {
+                    int bit = __builtin_ctzll(x); x &= x - 1;
+                    const signed char *u = dom[Y] + 34 * (64 * w + bit);
+                    for (int i = 0; i < 17; i++) { int c = (CC[Y] == v) ? u[i] + u[17 + i] : u[i] - u[17 + i]; if (c != -s[i]) { b[w] &= ~(1ULL << bit); break; } }
+                }
+            }
+            if (!anybit(b, nwd[Y])) goto out;
+        } else if (cnt == 2) {
+            starsum_dom(v, s);
+            for (int side = 0; side < 2; side++) {
+                int A = op[side], Bc = op[1 - side];
+                u64 *bB = dlev[depth + 1][Bc], *bA = dlev[depth + 1][A];
+                int nB = popc(bB, nwd[Bc]);
+                int hs = 1;
+                while (hs < 2 * nB + 2) hs <<= 1;
+                if (hs > hcap) { free(htab); htab = malloc(sizeof(u64) * (size_t)hs); hcap = hs; }
+                memset(htab, 0, sizeof(u64) * (size_t)hs);
+                u64 *kb = (CC[Bc] == v) ? kp[Bc] : km[Bc];
+                for (int w = 0; w < nwd[Bc]; w++) {
+                    u64 x = bB[w];
+                    while (x) {
+                        int bit = __builtin_ctzll(x); x &= x - 1;
+                        u64 key = kb[64 * w + bit] + 1ULL;
+                        int pos = (int)(((key * 0x9E3779B97F4A7C15ULL) >> 20) & (u64)(hs - 1));
+                        while (htab[pos] && htab[pos] != key) pos = (pos + 1) & (hs - 1);
+                        htab[pos] = key;
+                    }
+                }
+                for (int w = 0; w < nwd[A]; w++) {
+                    u64 x = bA[w];
+                    while (x) {
+                        int bit = __builtin_ctzll(x); x &= x - 1;
+                        const signed char *u = dom[A] + 34 * (64 * w + bit);
+                        int needv[17], okr = 1;
+                        for (int i = 0; i < 17; i++) {
+                            int c = (CC[A] == v) ? u[i] + u[17 + i] : u[i] - u[17 + i];
+                            needv[i] = -s[i] - c;
+                            if (needv[i] < -4 || needv[i] > 4) { okr = 0; break; }
+                        }
+                        int found = 0;
+                        if (okr) {
+                            u64 key = ckey(NULL, 0, needv) + 1ULL;
+                            int pos = (int)(((key * 0x9E3779B97F4A7C15ULL) >> 20) & (u64)(hs - 1));
+                            while (htab[pos]) { if (htab[pos] == key) { found = 1; break; } pos = (pos + 1) & (hs - 1); }
+                        }
+                        if (!found) bA[w] &= ~(1ULL << bit);
+                    }
+                }
+                if (!anybit(bA, nwd[A])) goto out;
+            }
+        }
+    }
+    res = rec_dom(depth + 1, R2);
+out:
+    assigned[X] = 0;
+    return res;
+}
+static int rec_dom(int depth, double R[15][15]) {
+    nodes++;
+    if (nodes > cap) return 2;
+    int best = -1, bc = 1 << 30;
+    for (int Y = 0; Y < NC; Y++) if (!assigned[Y]) { int c = popc(dlev[depth][Y], nwd[Y]); if (c < bc) { bc = c; best = Y; } }
+    if (best < 0) { for (int i = 0; i < 15; i++) for (int j = 0; j < 15; j++) if (fabs(R[i][j]) > 1e-6) return 0; return 1; }
+    /* copy alive sets of assigned cells are irrelevant; unassigned ones are filtered into depth+1 by try_dom */
+    u64 *b = dlev[depth][best];
+    for (int w = 0; w < nwd[best]; w++) {
+        u64 x = b[w];
+        while (x) { int bit = __builtin_ctzll(x); x &= x - 1; int r = try_dom(depth, best, 64 * w + bit, R); if (r) return r; }
+    }
+    return 0;
+}
 static int try_bits(int k, int t, double R[15][15]) {
     const double *pv = proj[k] + 30 * t;
     double R2[15][15];
@@ -553,6 +673,23 @@ static int solve_bits(long long capv, long long *nodes_out) {
     for (int i = 0; i < 15; i++) for (int j = 0; j < 15; j++) R[i][j] = (i == j) ? 28.0 : 0.0;
     int r;
     if (use_ac && !ac_full()) { r = 0; nodes = 1; st_acwipe++; }
+    else if (use_dom) {
+        for (int X = 0; X < NC; X++) for (int t = 0; t < ndom[X]; t++) if (!rowdone[X][t]) compat_row(X, t);
+        for (int X = 0; X < NC; X++) for (int Y = 0; Y < X; Y++) {
+            cmT[X][Y] = calloc((size_t)ndom[X] * nwd[Y], sizeof(u64));
+            for (int q = 0; q < ndom[Y]; q++) {
+                const u64 *row = compat[Y][X] + (size_t)q * nwd[X];
+                for (int t = 0; t < ndom[X]; t++) if (row[t >> 6] >> (t & 63) & 1) cmT[X][Y][(size_t)t * nwd[Y] + (q >> 6)] |= 1ULL << (q & 63);
+            }
+        }
+        for (int L = 0; L <= NC; L++) for (int X = 0; X < NC; X++) {
+            dlev[L][X] = calloc((size_t)nwd[X], sizeof(u64));
+        }
+        for (int X = 0; X < NC; X++) { memcpy(dlev[0][X], levb[0][X], sizeof(u64) * (size_t)nwd[X]); assigned[X] = 0; }
+        r = rec_dom(0, R);
+        for (int L = 0; L <= NC; L++) for (int X = 0; X < NC; X++) free(dlev[L][X]);
+        for (int X = 0; X < NC; X++) for (int Y = 0; Y < X; Y++) { free(cmT[X][Y]); cmT[X][Y] = NULL; }
+    }
     else r = rec_bits(0, R);
     for (int v = 0; v < 7; v++) for (int pr = 0; pr < 3; pr++) if (has3[v][pr]) { free(H3[v][pr]); has3[v][pr] = 0; }
     for (int X = 0; X < NC; X++) {
@@ -808,6 +945,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "dedupe")) { dedupe = 1; }
         else if (!strcmp(argv[a], "countonly")) { countonly = 1; }
         else if (!strcmp(argv[a], "noac")) { use_ac = 0; }
+        else if (!strcmp(argv[a], "nodom")) { use_dom = 0; }
         else if (!strcmp(argv[a], "probe") && a + 2 < argc) { probe_q = atof(argv[a + 1]); rng_state ^= (u64)atoll(argv[a + 2]) * 0xD1B54A32D192ED03ULL; if (!rng_state) rng_state = 7; a += 2; }
         else if (!strcmp(argv[a], "debug") && a + 2 < argc) { debugN = atoll(argv[a + 1]); fdbg = fopen(argv[a + 2], "w"); a += 2; }
     }
