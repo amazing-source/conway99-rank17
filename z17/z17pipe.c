@@ -1303,6 +1303,109 @@ progress:
     }
 }
 
+/* Anchor-star prefix test (structures 28/09, from Sol's graph-origin star lemma R1): the 12 labels of the star of vertex 0
+   (cells (0,d)) must pairwise satisfy the rule ((w,w') + 1) in {0,+-4} across cells, (w+,w-) in {0,+-4} within a cell, and
+   each label has at most one +1 and at most one -1 pairing inside the star (equal numbers once the star is complete, where
+   the star equation sum_d a_0d = 0 also holds). Domains for a prefix rows[0..k]: in-cell pairs of the class rows[d], M1 w.r.t.
+   the known rows only, h-normalisation of the (0,d) cells; no L1 refinement (supersets of the leaf domains, so the test is
+   sound). */
+static int use_astar = 0, astar_min = 3, astar_ahead = 1; static long long astar_calls = 0, astar_kills = 0, astar_nodes = 0, astar_cap = 2000000;
+static signed char *aD[7]; static int aN[7], aCap[7];
+static int aCnt[7][2][2];                /* [cell d][label s][sign] counts inside star 0 */
+static int aCh[7];
+static int aK;
+static int a_pair(const signed char *x, const signed char *y) { int g = 0; for (int i = 0; i < 17; i++) g += x[i] * y[i]; return g; }
+static int astar_rec(int d) {
+    if (++astar_nodes > astar_cap) return 1;              /* inconclusive: keep the prefix */
+    if (d > aK) {
+        if (aK == 6) {
+            int sum[17] = {0};
+            for (int e = 1; e <= 6; e++) { const signed char *w = aD[e] + 34 * aCh[e]; for (int i = 0; i < 17; i++) sum[i] += w[i] + w[17 + i]; }
+            for (int i = 0; i < 17; i++) if (sum[i]) return 0;
+            for (int e = 1; e <= 6; e++) for (int q = 0; q < 2; q++) if (aCnt[e][q][0] != aCnt[e][q][1]) return 0;
+        } else if (aK >= 4 && astar_ahead) {
+            /* star equation look-ahead: the missing anchors' a-vectors sum to T = -sum of the assigned a's.
+               For a missing cell and an assigned label v: (a,v) in {-3,-1,1} (one -1 / nothing or a (+1,-1) pair / one +1).
+               aK = 5: T = a_06, |T|^2 in {3,5,7}; aK = 4: (T,v) = sum of two such values. Final R1 counts must be equal <= 1. */
+            int T[17] = {0};
+            for (int e = 1; e <= aK; e++) { const signed char *w = aD[e] + 34 * aCh[e]; for (int i = 0; i < 17; i++) T[i] -= (w[i] + w[17 + i]) / 2; }
+            if (aK == 5) { int n2 = 0; for (int i = 0; i < 17; i++) n2 += T[i] * T[i]; if (n2 != 3 && n2 != 5 && n2 != 7) return 0; }
+            for (int e = 1; e <= aK; e++)
+                for (int q = 0; q < 2; q++) {
+                    const signed char *v = aD[e] + 34 * aCh[e] + 17 * q;
+                    int ip = 0; for (int i = 0; i < 17; i++) ip += T[i] * v[i];
+                    int cp = aCnt[e][q][0], cm = aCnt[e][q][1], ok;
+                    if (aK == 5) ok = (ip == -3) ? (cp == 1 && cm == 0) : (ip == 1) ? (cp == 0 && cm == 1) : (ip == -1) ? (cp == cm) : 0;
+                    else ok = (ip == -4) ? (cp == 1 && cm == 0) : (ip == 0) ? (cp == 0 && cm == 1) : (ip == -2) ? (cp == cm) : 0;
+                    if (!ok) return 0;
+                }
+        }
+        return 1;
+    }
+    for (int t = 0; t < aN[d]; t++) {
+        const signed char *w = aD[d] + 34 * t;
+        int ok = 1, delta[7][2][2];
+        memset(delta, 0, sizeof delta);
+        int gin = a_pair(w, w + 17);                        /* (w+,w-) = 4 (u+,u-) */
+        if (gin) { int sg = gin > 0 ? 0 : 1; delta[d][0][sg]++; delta[d][1][sg]++; }
+        for (int e = 1; e < d && ok; e++) {
+            const signed char *v = aD[e] + 34 * aCh[e];
+            for (int s2 = 0; s2 < 2 && ok; s2++)
+                for (int t2 = 0; t2 < 2 && ok; t2++) {
+                    int g = a_pair(w + 17 * s2, v + 17 * t2) + 1;
+                    if (!(g == 0 || g == 4 || g == -4)) { ok = 0; break; }
+                    if (g) { int sg = g > 0 ? 0 : 1; delta[d][s2][sg]++; delta[e][t2][sg]++; }
+                }
+        }
+        if (!ok) continue;
+        for (int e = 1; e <= d && ok; e++)
+            for (int q = 0; q < 2 && ok; q++)
+                for (int sg = 0; sg < 2; sg++) if (aCnt[e][q][sg] + delta[e][q][sg] > 1) { ok = 0; break; }
+        if (!ok) continue;
+        for (int e = 1; e <= d; e++) for (int q = 0; q < 2; q++) for (int sg = 0; sg < 2; sg++) aCnt[e][q][sg] += delta[e][q][sg];
+        aCh[d] = t;
+        int r = astar_rec(d + 1);
+        for (int e = 1; e <= d; e++) for (int q = 0; q < 2; q++) for (int sg = 0; sg < 2; sg++) aCnt[e][q][sg] -= delta[e][q][sg];
+        if (r) return 1;
+    }
+    return 0;
+}
+static int astar_test(const unsigned *rw, int k) {          /* rows rw[0..k] known (rw[0] = 0) */
+    astar_calls++;
+    for (int d = 1; d <= k; d++) {
+        unsigned S = rw[d];
+        usable(S);
+        int n = ncvec[S];
+        const signed char *W = cvec[S];
+        aN[d] = 0;
+        for (int p = 0; p < n; p++)
+            for (int q = 0; q < n; q++) {
+                if (p == q) continue;
+                const signed char *wp = W + 17 * p, *wq = W + 17 * q;
+                int g = a_pair(wp, wq);
+                if (!(g == 0 || g == 4 || g == -4)) continue;
+                int a[17], b[17], okm = 1;
+                for (int i = 0; i < 17; i++) { a[i] = (wp[i] + wq[i]) / 2; b[i] = (wp[i] - wq[i]) / 2; }
+                for (int e = 1; e <= k && okm; e++) {       /* M1 for c = 0: a . rows[e] odd for every known e >= 1 */
+                    int sa = 0;
+                    for (int i = 0; i < 17; i++) if (rw[e] >> i & 1) sa += a[i];
+                    if (!(sa & 1)) okm = 0;
+                }
+                if (!okm) continue;
+                if (use_csign) { if (first_pos_nz(b) == 0) continue; if (d == 1 && first_pos_nz(a) == 0) continue; }
+                else { if (!first_pos(b)) continue; if (d == 1 && !first_pos(a)) continue; }
+                if (aN[d] == aCap[d]) { aCap[d] = aCap[d] ? 2 * aCap[d] : 1024; aD[d] = realloc(aD[d], 34 * (size_t)aCap[d]); }
+                memcpy(aD[d] + 34 * aN[d], wp, 17); memcpy(aD[d] + 34 * aN[d] + 17, wq, 17); aN[d]++;
+            }
+        if (!aN[d]) { astar_kills++; return 0; }
+    }
+    memset(aCnt, 0, sizeof aCnt);
+    aK = k; astar_nodes = 0;
+    int r = astar_rec(1);
+    if (!r) astar_kills++;
+    return r;
+}
+
 static int GOOD(int w) { return w == 2 || w == 6 || w == 10; }
 static void dfs(Part *parts, int np);
 static int selv[64];
@@ -1336,7 +1439,7 @@ static void choose(Part *parts, int np, int a, int wt, unsigned forced) {
         rows[nrows++] = m;
         int ok = m1_ok();
         if (!ok) m1_prunes++;
-        if (ok && kfeasible()) {
+        if (ok && kfeasible() && (!use_astar || nrows - 1 < astar_min || astar_test(rows, nrows - 1))) {
             Part np2[64];
             int n2 = 0;
             for (int b = 0; b < np; b++) {
@@ -1556,6 +1659,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "pz4")) { knuth_pz4 = 1; }
         else if (!strcmp(argv[a], "dc")) { use_dc = 1; }
         else if (!strcmp(argv[a], "k57")) { use_k57 = 1; }
+        else if (!strcmp(argv[a], "astar") && a + 1 < argc) { use_astar = 1; astar_min = atoi(argv[a + 1]); a += 1; }
+        else if (!strcmp(argv[a], "noahead")) { astar_ahead = 0; }
         else if (!strcmp(argv[a], "dump") && a + 1 < argc) { fdump = fopen(argv[a + 1], "w"); a += 1; }
         else if (!strcmp(argv[a], "debug") && a + 2 < argc) { debugN = atoll(argv[a + 1]); fdbg = fopen(argv[a + 2], "w"); a += 2; }
     }
@@ -1675,6 +1780,7 @@ int main(int argc, char **argv) {
                     for (int L = 2; L < 7; L++) printf(" %.3g", kn_pzsec[L] / n);
                     printf(" leaves passing all pz4 %.4g (se %.2g)", mp, sep);
                 }
+                if (use_astar) printf(" | astar calls %lld kills %lld", astar_calls, astar_kills);
                 printf(" (%lds)%c", (long)(time(NULL) - t0), 10);
                 fflush(stdout);
             }
