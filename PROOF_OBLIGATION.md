@@ -9,6 +9,28 @@ collecting side contradictions.*
   - **C1 = R6**: J3, then J2, then J1a;
   - **structures = R8**: k = 0 first, then k = 3, 2, 1.
 - Each closed cell gets a note and a one-line [RESULTAT].
+
+**STATUS (28/09, late night; C1).** Details in conway99-c1 notes/151 §5–7.
+- **Coverage (CALCUL).**
+  - R8 alone covers **676/754**; R6 alone 555; R5 412; R7 274.
+  - R5 ∧ R8 misses 38 classes and R7 ∧ R8 misses 44.
+  - Every (6,8,8) class also has an n=8 witness.
+  - So **the triple route is dropped**: it is off the critical path.
+  - **R6 is still needed in full** for the 78 classes outside R8. Some of them have a single short vector (one n=6 κ).
+- **R8 is the biggest lever** (676 classes).
+- **New tool (structures, joint).** For any label set U, 12I − 4T_UU − R_U R_Uᵀ = 28(P₋₄)_UU is PSD of rank ≤ 15 (odd test).
+  The σ-even analogue 6I − 2|T_UU| − 4D_UU − |R||R|ᵀ + J is also PSD (even test).
+  - On random samples of J1a (v), odd + even kills everything sampled (13 odd-survivors, all dead on the even test).
+  - The same holds for R8 k=1 T1.
+  - Still open: a universal (hand) certificate. The margins are small (down to −0.08), so a full proof may need an exhaustive
+    exact check. **That needs the user's authorisation.**
+- **J1a (v) structure (DERIVED).**
+  - The star part has product form h = a_b·(c-sign).
+  - G_star (the star labels) is bipartite.
+  - There is a second integer eigenvector u = d − (3/2)h|_S that vanishes on star(c), and span(h|_star, s, D) is A-invariant
+    with spectrum {3, −4, −4}.
+  - All of this is consistent: no contradiction yet.
+
 **STATUS (28/09 ~18:30), saved before an auto-compaction.**
 - **J1a (iii) and (v) remain open.**
   - They pass every local test: per-coordinate harmonicity (all 64 group choices), star-Gram and E4-pair bounds, and automatic
