@@ -20,6 +20,10 @@ Labels: PROVEN / DERIVED / PATTERN (sampled). Nothing here counts as an exclusio
    - AC wipes out exactly the same skeletons: 11/11 wipeouts agree, and the 1 surviving skeleton survives both versions.
    - So the |(u,v)| ≤ 1 bound plays no role in the kill. The obstruction is ℤ₄ self-orthogonality between the shaped lifts of the 21 residue classes.
    - This is the candidate for a uniform lemma: a statement about self-dual ℤ₄ codes of type 4⁶2¹² whose residue is the graph of ρ.
+   - **CORRECTION (28/09 ~05:10): not universal.** The ℤ¹⁷ pair-6 lead 040c0408… is mod-4 feasible (and LP-feasible). It dies only in
+     the integer search.
+     C1 finds hundreds of thousands of mod-4 survivors on A11E6⁺, D8²⁺ and E7²⁺. There the kill is integer-level (star 1).
+     So the mod-4 layer kills most skeletons (99% of pair 0), but NOT all. A uniform proof needs the integer layer too.
 5. **Contrast (C2's data):**
    - E₈⊕ℤ⁹: AC kills 15/15, like ℤ¹⁷.
    - D₁₂⁺⊕ℤ⁵: AC kills 0/12. The per-skeleton LP kills are driven by the frame rows ("one pair per cell + frame" is infeasible in 21/23), not by the stars.

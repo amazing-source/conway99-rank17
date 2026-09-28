@@ -1,3 +1,7 @@
+CAVEAT (added 28/09 ~05:10): the "purely mod 4" pattern is NOT universal. Some skeletons (ℤ¹⁷ pair 6, and C1's A11E6⁺ / D8²⁺ / E7²⁺)
+pass the exact mod-4 test and die only on the integer rules |(u,v)| ≤ 1, the stars and the frame. So ask for a mod-4 lemma covering
+MOST skeletons, or for a lemma that combines mod 4 with the integer bounds.
+
 FOLLOW-UP (same notation as the previous prompt): the lift-layer kill is purely mod 4.
 
 NEW DATA (V = ℤ¹⁷, PATTERN)
