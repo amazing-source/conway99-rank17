@@ -1309,7 +1309,7 @@ progress:
    the star equation sum_d a_0d = 0 also holds). Domains for a prefix rows[0..k]: in-cell pairs of the class rows[d], M1 w.r.t.
    the known rows only, h-normalisation of the (0,d) cells; no L1 refinement (supersets of the leaf domains, so the test is
    sound). */
-static int use_astar = 0, astar_min = 3, astar_ahead = 1; static long long astar_calls = 0, astar_kills = 0, astar_nodes = 0, astar_cap = 2000000;
+static int use_astar = 0, astar_min = 3, astar_ahead = 1, astar_ahead_min = 4; static long long astar_calls = 0, astar_kills = 0, astar_nodes = 0, astar_cap = 2000000;
 static signed char *aD[7]; static int aN[7], aCap[7];
 static int aCnt[7][2][2];                /* [cell d][label s][sign] counts inside star 0 */
 static int aCh[7];
@@ -1323,7 +1323,7 @@ static int astar_rec(int d) {
             for (int e = 1; e <= 6; e++) { const signed char *w = aD[e] + 34 * aCh[e]; for (int i = 0; i < 17; i++) sum[i] += w[i] + w[17 + i]; }
             for (int i = 0; i < 17; i++) if (sum[i]) return 0;
             for (int e = 1; e <= 6; e++) for (int q = 0; q < 2; q++) if (aCnt[e][q][0] != aCnt[e][q][1]) return 0;
-        } else if (aK >= 4 && astar_ahead) {
+        } else if (aK >= astar_ahead_min && astar_ahead) {
             /* star equation look-ahead: the missing anchors' a-vectors sum to T = -sum of the assigned a's.
                For a missing cell and an assigned label v: (a,v) in {-3,-1,1} (one -1 / nothing or a (+1,-1) pair / one +1).
                aK = 5: T = a_06, |T|^2 in {3,5,7}; aK = 4: (T,v) = sum of two such values. Final R1 counts must be equal <= 1. */
@@ -1335,8 +1335,10 @@ static int astar_rec(int d) {
                     const signed char *v = aD[e] + 34 * aCh[e] + 17 * q;
                     int ip = 0; for (int i = 0; i < 17; i++) ip += T[i] * v[i];
                     int cp = aCnt[e][q][0], cm = aCnt[e][q][1], ok;
-                    if (aK == 5) ok = (ip == -3) ? (cp == 1 && cm == 0) : (ip == 1) ? (cp == 0 && cm == 1) : (ip == -1) ? (cp == cm) : 0;
-                    else ok = (ip == -4) ? (cp == 1 && cm == 0) : (ip == 0) ? (cp == 0 && cm == 1) : (ip == -2) ? (cp == cm) : 0;
+                    /* m = 6 - aK missing cells, each contributing (a,v) in {-3,-1,1}; at most one -3 and one +1 overall:
+                       (T,v) = -m-2 needs (cp,cm) = (1,0); -m+2 needs (0,1); -m needs cp == cm; anything else is impossible */
+                    int m = 6 - aK;
+                    ok = (ip == -m - 2) ? (cp == 1 && cm == 0) : (ip == -m + 2) ? (cp == 0 && cm == 1) : (ip == -m) ? (cp == cm) : 0;
                     if (!ok) return 0;
                 }
         }
