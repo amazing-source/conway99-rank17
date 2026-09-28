@@ -32,6 +32,7 @@ static long long debugN = 0; static FILE *fdbg = NULL;
 static double tm_build = 0, tm_prep = 0, tm_solve = 0;
 static int killer[NC + 1];
 static int countonly = 0, toponly = 0; static long long top_total = 0;
+static double probe_q = 1.0;
 
 static int pc(unsigned x) { return __builtin_popcount(x); }
 static double urand(void) { rng_state ^= rng_state << 13; rng_state ^= rng_state >> 7; rng_state ^= rng_state << 17; return (rng_state >> 11) * (1.0 / 9007199254740992.0); }
@@ -763,6 +764,7 @@ static void choose(Part *parts, int np, int a, int wt, unsigned forced) {
             long long tc = top_counter++;
             if (tc % part_m != part_r) return;
         }
+        if (probe_q < 1.0 && c >= 2 && urand() > probe_q) return;     /* random probing: keep each branch with prob q */
         rows[nrows++] = m;
         int ok = m1_ok();
         if (!ok) m1_prunes++;
@@ -806,6 +808,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "dedupe")) { dedupe = 1; }
         else if (!strcmp(argv[a], "countonly")) { countonly = 1; }
         else if (!strcmp(argv[a], "noac")) { use_ac = 0; }
+        else if (!strcmp(argv[a], "probe") && a + 2 < argc) { probe_q = atof(argv[a + 1]); rng_state ^= (u64)atoll(argv[a + 2]) * 0xD1B54A32D192ED03ULL; if (!rng_state) rng_state = 7; a += 2; }
         else if (!strcmp(argv[a], "debug") && a + 2 < argc) { debugN = atoll(argv[a + 1]); fdbg = fopen(argv[a + 2], "w"); a += 2; }
     }
     for (int i = 0; i < 17; i++) if (fscanf(f, "%d", &Y1[i]) != 1) return 1;
