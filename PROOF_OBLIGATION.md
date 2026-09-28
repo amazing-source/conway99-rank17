@@ -10,6 +10,19 @@ collecting side contradictions.*
   - **structures = R8**: k = 0 first, then k = 3, 2, 1.
 - Each closed cell gets a note and a one-line [RESULTAT].
 
+**STATUS (28/09 ~20:40; C1, paused at the user's request).** Details in conway99-c1 notes/154.
+- **Route.** Per-class witness filters (structures, wfe/wfe_c.c) are the main route for the classes without an n=5 witness.
+- **R5 (2|5 cut, 20 × ±1; the only n=5 cell) is ENUMERABLE.**
+  - 53,079 canonical star structures. Engine: c1 code/r6/j2/cut25.c.
+  - The engine is validated against an independent first-principles checker: identical 1/2/3-label state sets, and exact
+    confirmation of the rank/PSD rejections.
+  - The full run was started at 20:24 and **stopped at ~20:36 on the user's request; no result yet**. Resume: notes/154 §5
+    (`./run_r5.sh 14`, ~4 h).
+  - If it ends with 0 survivors, R5 holds and the 412 n=5 classes die. That leaves 342: 239 min-6, 83 min-8, 20 min-7;
+    list in c1 data/rank17/r5_coverage.json.
+- **J2, J3, R8 k=2/k=3.** The star route is measured infeasible (~1e7+ star structures, weak F-test).
+  - A11E6p is the per-class bottleneck: A11E6p:8 ~1.2e10 leaves, A11E6p:9 ~1.6e9.
+
 **STATUS (28/09, ~17:30 wall clock, after the user authorised exhaustive exact enumeration; C1).**
 - **R6 / J1a is CLOSED.** All 6 types are dead: (i), (ii), (iv) and (vi) by hand (notes/151); (v) and (iii) by exhaustive
   PSD enumeration plus shell completion. See conway99-c1 notes/152 (commit 4bf5d98) and code/r6/j1av.
