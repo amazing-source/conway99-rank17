@@ -134,3 +134,25 @@ Labels: PROVEN / DERIVED / PATTERN (sampled). Nothing here counts as an exclusio
 
   - The Z4 kill rate depends strongly on the pair: 97% for pair 0, but only about half for pairs 1 and 2.
   - No sampled leaf was FOUND or LIMIT.
+
+## Sol's graph-origin star rules (28/09 ~09:40–10:20)
+
+- Rules (PROVEN by Sol from λ = 1, μ = 2; signs checked by C1):
+  - (R1) in a star's local orientation the u-Gram is Q − P, two perfect matchings: each u has at most one +1 and one −1 there,
+    in equal numbers.
+  - (R2) an outside row has at most 2 of each sign, again equal.
+  - (R3) every u has exactly 10 neighbours.
+- In the stage-B solver (`sbdfs_gs.exe ... star`): the pair-3 LIMIT skeleton (59 M nodes in z17pipe) is EXCLUDED in 61,505 nodes
+  (12 s). Every branch dies within the first four anchor cells.
+- As a stage-A prefix test on the anchor star (z17pipe `astar k`), with the star-equation look-ahead:
+  - Look-ahead rule (PROVEN): with m anchors missing, (T,v) ∈ {−m−2, −m, −m+2} for every assigned label v, with the matching
+    count conditions.
+  - Pair 0: no Knuth walk reaches a leaf. Every complete anchor star dies.
+  - But the depth-5 node count only halves (8e6 vs 1.4e7 over 16 walks; the smaller 8-walk figures were noise), and each test
+    costs ~0.14 s.
+  - So it is a strong LEAF filter but not a tree cut. Dropped.
+- V-free model `n5_signed.py` (CP-SAT):
+  - contents: S1 matchings, S2 outside rows, S3 degree 10; optionally the n = 5 cut vector with Na = 4a (Sol's boxed lemma) and
+    N² = N + 12I − G_r;
+  - without N², both variants are UNKNOWN at 3–5 min, and C1 points out that this relaxation is too weak to be informative;
+  - a 30-min, 6-worker run of n = 5 + N² is in progress.
