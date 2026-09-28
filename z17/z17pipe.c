@@ -240,6 +240,31 @@ static void starsum(int v, int k, int *s) {
     }
 }
 static int first_pos(const int *a) { for (int i = 0; i < 17; i++) if (a[i]) return a[i] > 0; return 0; }
+/* symmetry C: sign flips of coordinates where y1 = y2 = 0 (zc_mask).  H-normalisation must be C-invariant, so it looks only at
+   coordinates outside zc_mask; a vector with no support there is not normalised (both signs kept).  In the search, a lex-leader
+   rule fixes the C-signs: along the path, the first non-zero entry at each zc coordinate (w+ before w-) must be positive. */
+static unsigned zc_mask = 0;
+static int use_csign = 1;
+static unsigned cfix[64];
+static int first_pos_nz(const int *a) {           /* 1: positive, 0: negative, 2: no support outside zc (accept) */
+    for (int i = 0; i < 17; i++) if (!(zc_mask >> i & 1) && a[i]) return a[i] > 0;
+    return 2;
+}
+static int csign_ok(const signed char *w, unsigned fixed, unsigned *out) {
+    unsigned f = fixed;
+    if (use_csign) {
+        for (int h = 0; h < 2; h++) {
+            const signed char *v = w + 17 * h;
+            for (int i = 0; i < 17; i++) {
+                if (!(zc_mask >> i & 1) || (f >> i & 1) || !v[i]) continue;
+                if (v[i] < 0) return 0;
+                f |= 1u << i;
+            }
+        }
+    }
+    *out = f;
+    return 1;
+}
 
 static const int *g_keys;
 static int cmpk(const void *a, const void *b) { int x = g_keys[*(const int *)a], y = g_keys[*(const int *)b]; return (x > y) - (x < y); }
@@ -305,8 +330,13 @@ static int build(const unsigned *rows, const int *cols) {
                 if (c == 0) {
                     int a[17], b[17];
                     for (int i = 0; i < 17; i++) { a[i] = (wp[i] + wq[i]) / 2; b[i] = (wp[i] - wq[i]) / 2; }
-                    if (!first_pos(b)) continue;
-                    if (d == 1 && !first_pos(a)) continue;
+                    if (use_csign) {
+                        if (first_pos_nz(b) == 0) continue;
+                        if (d == 1 && first_pos_nz(a) == 0) continue;
+                    } else {
+                        if (!first_pos(b)) continue;
+                        if (d == 1 && !first_pos(a)) continue;
+                    }
                 }
                 if (nd == capd) { capd *= 2; D = realloc(D, (size_t)capd * 34); IP = realloc(IP, sizeof(int) * 2 * (size_t)capd); }
                 memcpy(D + 34 * nd, wp, 17); memcpy(D + 34 * nd + 17, wq, 17);
@@ -439,6 +469,7 @@ static void zfilter(void) {
 static int rec_plain(int k, double R[15][15]);
 static int try_plain(int k, int t, double R[15][15]) {
     const signed char *w = dom[k] + 34 * t;
+    if (!csign_ok(w, cfix[k], &cfix[k + 1])) return 0;
     const double *pv = proj[k] + 30 * t;
     double R2[15][15];
     for (int i = 0; i < 15; i++) for (int j = 0; j < 15; j++) R2[i][j] = R[i][j] - pv[i] * pv[j] - pv[15 + i] * pv[15 + j];
@@ -531,6 +562,7 @@ static void starsum_dom(int v, int *s) {
     }
 }
 static int try_dom(int depth, int X, int t, double R[15][15]) {
+    if (!csign_ok(dom[X] + 34 * t, cfix[depth], &cfix[depth + 1])) return 0;
     const double *pv = proj[X] + 30 * t;
     double R2[15][15];
     for (int i = 0; i < 15; i++) for (int j = 0; j < 15; j++) R2[i][j] = R[i][j] - pv[i] * pv[j] - pv[15 + i] * pv[15 + j];
@@ -632,6 +664,7 @@ static int rec_dom(int depth, double R[15][15]) {
     return 0;
 }
 static int try_bits(int k, int t, double R[15][15]) {
+    if (!csign_ok(dom[k] + 34 * t, cfix[k], &cfix[k + 1])) return 0;
     const double *pv = proj[k] + 30 * t;
     double R2[15][15];
     for (int i = 0; i < 15; i++) for (int j = 0; j < 15; j++) R2[i][j] = R[i][j] - pv[i] * pv[j] - pv[15 + i] * pv[15 + j];
@@ -1135,6 +1168,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "dedupe")) { dedupe = 1; }
         else if (!strcmp(argv[a], "countonly")) { countonly = 1; }
         else if (!strcmp(argv[a], "noac")) { use_ac = 0; }
+        else if (!strcmp(argv[a], "nocsign")) { use_csign = 0; }
         else if (!strcmp(argv[a], "maxtime") && a + 1 < argc) { maxtime = atol(argv[a + 1]); a += 1; }
         else if (!strcmp(argv[a], "nodom")) { use_dom = 0; }
         else if (!strcmp(argv[a], "noz4")) { use_z4 = 0; }
@@ -1180,6 +1214,8 @@ int main(int argc, char **argv) {
     }
     for (int v = 0; v < 7; v++) lastk[v] = -1;
     for (int x = 0; x < NC; x++) { lastk[CC[x]] = x; lastk[CD[x]] = x; }
+    for (int i = 0; i < 17; i++) if (Y1[i] == 0 && Y2[i] == 0) zc_mask |= 1u << i;
+    cfix[0] = 0;
     snprintf(fn, sizeof fn, "%s.surv", argv[2]); fsurv = fopen(fn, "w");
     if (dedupe) gen_perms();
     for (int a = 3; a < argc; a++) if (!strcmp(argv[a], "leaves") && a + 1 < argc) {
