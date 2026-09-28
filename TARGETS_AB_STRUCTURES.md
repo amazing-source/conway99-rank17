@@ -200,3 +200,46 @@ Facts:
 Next:
 - the D₇ cell analysis (net_d ∈ {0,±1}; C4: per line, ≤ 1 aligned partner of each relative sign; F4) for C₅ and the house;
 - the G⁻/D₂ ≠ ∅ variants.
+
+## 8. HANDOFF — state at 28/09 evening (read this first after a context reset)
+**Finish line (C1's PROOF_OBLIGATION.md): R6 ∧ R8 closes all 754 open classes.** Solvers and enumeration are banned; proofs
+are by hand. Each closed cell gets a one-line [RESULTAT] to C1 plus a second reader.
+
+Ownership:
+- **C1 owns R6.**
+  - J0 closed (min N* ≥ 8/7). J1b closed (star bound).
+  - J1a (conway99-c1 notes/151 §2.7–2.9): types (i), (ii), (iv), (vi) dead; (iii) P₄ and (v) triangle open. C1 is on (v).
+  - J2 and J3: structure only (notes/151 §1, §2ter).
+- **structures owns R8.**
+  - k=0: **PROVEN** (§5–6, second reader C1, commit 19c170d).
+  - Patterns with ±3/±4: dead (C1's row-capacity lemma, notes/151 §2bis).
+  - Left: **k=1** (12 ±1 on star(c) + five ±2), **k=2** (20 ±1 on a 2|5 cut + three ±2), **k=3** (24 ±1 on a 3|4 cut + two ±2).
+
+**R8 k=1 state (§7)**:
+- δ_k ∈ {2,3}. There are no anti pairs (λ(v_k,v_l) = 1 vs 3 common aligned nbrs). |D₂| ≤ 2, from E₂₂ ≤ 19.
+- Remaining types:
+  - (T1) G⁺ = C₅, δ ≡ 2, D = 10. v's touch only −1 star roots and σv's only +1 ones; the D-orbits are zero roots.
+  - (T2) the house: edges ab, ax, bx, ay, yz, zb; δ_a = δ_b = 3. r_a ≠ r_b, and r_a's σv-nbrs ⊆ {σv_a, σv_z} + one of σv_{b,x,y}.
+  - (T3) C₅ k–p–r–l–q–k plus a D-pair (k,l).
+  - (T4) G⁺ = {kp, kq, lq, lr, pq, pr} plus a D-pair (k,l).
+  - (T5) two D-pairs, |G⁺| = 5, D = 10.
+- In the D-pair types, the apex of v_kv_l is σv_q, and that of v_kσv_q is v_l.
+- Tools that hold:
+  - E₂₂ ≤ 19;
+  - star-root sums Σ_r g = 80 − 4D, X = 32 − 4D;
+  - per-line rule C4/F4 (the aligned pairs inside L_d^± form a matching at each line);
+  - μ(v_k, v_{k+2}) budget 1 beyond σv_{k+1};
+  - harmonicity f = ρ·N with f = −h on X-line star roots and 0 on S-line ones (net_d ∈ {0,±1});
+  - each ±2 root has exactly 2 + 2 star nbrs.
+- **Next:** enumerate the D₇ cell configurations for T1 (5 signed edges on B₀ with net ∈ {0,±1}, C4, F4). Then kill each with
+  roles plus harmonicity (C1's J1a method, notes/151 §2.9), and share the kills with J1a.
+
+**Tools that proved decisive:**
+- (G5) Cauchy–Schwarz in E₋₄ against r̂ = P₋₄1_S/2, applied to the vertices with no support nbrs, combined with an exact double
+  count of their internal edges.
+- The E₄ pair lemma.
+- The same-sign lemma (N(r) is a perfect matching).
+- D-orbit uniqueness (a σ-pair, one vertex of each sign).
+- λ-exclusivity in O_{d^s} (each vertex has exactly one nbr there).
+- Every aggregated linear or quadratic identity is automatic, as C1 found. Kills need pointwise local structure plus one
+  positivity inequality.
