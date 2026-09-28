@@ -33,6 +33,7 @@ static double tm_build = 0, tm_prep = 0, tm_solve = 0;
 static int killer[NC + 1];
 static int countonly = 0, toponly = 0; static long long top_total = 0;
 static double probe_q = 1.0;
+static long maxtime = 0; static int stop_now = 0;
 
 static int pc(unsigned x) { return __builtin_popcount(x); }
 static double urand(void) { rng_state ^= rng_state << 13; rng_state ^= rng_state >> 7; rng_state ^= rng_state << 17; return (rng_state >> 11) * (1.0 / 9007199254740992.0); }
@@ -984,6 +985,7 @@ static int kfeasible(void) {
 }
 
 static void leaf(void) {
+    if (maxtime && time(NULL) - t_start >= maxtime) { stop_now = 1; return; }
     int cols[17];
     for (int i = 0; i < 17; i++) {
         int c = 0;
@@ -1072,7 +1074,7 @@ static int GOOD(int w) { return w == 2 || w == 6 || w == 10; }
 static void dfs(Part *parts, int np);
 static int selv[64];
 static void choose(Part *parts, int np, int a, int wt, unsigned forced) {
-    if (wt > 10) return;
+    if (wt > 10 || stop_now) return;
     if (a == np) {
         if (!GOOD(wt)) return;
         int c = nrows, w2 = c >= 2 ? pc(rows[1]) : 2;
@@ -1133,6 +1135,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "dedupe")) { dedupe = 1; }
         else if (!strcmp(argv[a], "countonly")) { countonly = 1; }
         else if (!strcmp(argv[a], "noac")) { use_ac = 0; }
+        else if (!strcmp(argv[a], "maxtime") && a + 1 < argc) { maxtime = atol(argv[a + 1]); a += 1; }
         else if (!strcmp(argv[a], "nodom")) { use_dom = 0; }
         else if (!strcmp(argv[a], "noz4")) { use_z4 = 0; }
         else if (!strcmp(argv[a], "nozfilter")) { use_zfilter = 0; }
