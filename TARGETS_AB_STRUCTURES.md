@@ -159,7 +159,8 @@ c(·) = #outer-connector nbrs.
 - Every outer connector has n₀' = 4, with 4 − v(y) of those in Y. So it has exactly v(y) nbrs in {τ, στ}.
 - The connectors with v = 2 are common nbrs of τ and στ, so there are at most 2 of them.
 
-**G9. Cases.**
+**G9. Cases.** (f is disjoint from e: the roots with + at z* and those with − at z* are distinct, so σp_i ∉ O(z*⁺) for i ∈ e. That is why the z*-partner list of e = {0,2} excludes the overlapping {2,4} and {6,0}. Outer connectors may overlap; their allowed offsets are δ ∈ {2,…,6}.)
+**Status: PROVEN** (second reader C1, 28/09).
 - **K₄□K₂.** The hosted C₄-edge {M_a, M_b} makes the outer connectors a→d, d→a, b→c, c→b have v = 2. That is four ✗.
 - **C₈(1,2), e = {0,2}, f = {4,6}.** The edges {2,4} and {6,0} each carry v ≥ 2 on both connectors ✗.
 - **C₈(1,2), e = {0,2}, f = {3,5}** (f = {5,7} is the mirror image).
