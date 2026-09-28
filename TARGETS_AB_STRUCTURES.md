@@ -301,3 +301,13 @@ reductions.
   2³¹−1.
 - The user allows exact enumeration with certificates (relayed by C1, 28/09 late). It has not been run yet; the machine was busy
   with C1's J1a(v) run.
+
+## 10. Per-class witness-filtered engine (wfe/, 28/09 night) — status
+- Built and validated (wfe/README.md): skeleton search with two new lossless reductions (S7 base line; lexmin stabilizer
+  pruning by root transvections fixing the prefix), exact pair-level leaf check (M1, refined L1, exact-k witness values,
+  all witness-pair budgets 28(kappa,kappa') with fixpoint propagation, pair arc consistency), sbdfs search in K
+  coordinates. Stage-by-stage agreement with the Python reference on 129 sampled E8:5 skeletons.
+- Measured: n=5 classes ~1e5-1e6 leaves (feasible); min-6/min-8 classes 1e9-5e10 leaves (infeasible as is).
+- Hypothetical gain (measurement only): A11E6p:8 drops 1.2e10 -> 2.1e6 leaves if R8 k=2,3 hold, and to 0 skeletons if J2
+  also holds. So the general targets R8 k=2, R8 k=3, J2 (C1's cut engine) are what makes the 342 non-n5 classes cheap.
+- Paused 28/09 ~20:45 on the user's stop; no production run.

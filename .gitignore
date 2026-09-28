@@ -2,3 +2,8 @@ logs/
 z17/out/*.raw
 z17/__pycache__/
 *.pyc
+wfe/*.exe
+r8k1/*.exe
+*.pkl
+min8/*.json
+wfe/est*.err
