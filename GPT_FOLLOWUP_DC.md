@@ -20,6 +20,12 @@ WHAT WE TRIED ON TOP OF DC
   - It only has force at slack ≤ 1 (n within 4 of your thresholds), which is rare on ℤ¹⁷.
 - Remark (please confirm): PE is IB applied to x ∈ U_H with λ = 1_P, and DC is IB applied to the half-lifts P_W x = κ/2.
   So together they exhaust the single-vector IB bounds on U.
+- C1 (DERIVED): at a prefix, the ±2 pattern j of the lift is fixed by φ, not by ρ. So the minimum over j of single-vector IB is
+  exactly DC, and single-vector arguments cannot cut more at a partial ρ.
+  - Once φ is fixed, j is determined, and boundary classes (n = 12/16 at ℓ = 4, n = 18 at ℓ = 2/6) force every s_u. That gives a
+    cheap unary leaf filter, but not a tree cut.
+  - Also: all 1,206 first mod-4 survivors in C1's classification were DC-forbidden. With DC on, a mod-4 survivor still appears at
+    the first DC-allowed leaf.
 
 QUESTIONS
 1. Multi-vector IB. Take several short x_1..x_m ∈ U of PE and DC type, with small budgets. Their pairing vectors
