@@ -175,3 +175,28 @@ Consequence: the k = 0 cell of R8 is closed. Remaining R8 cells, after C1's row-
 - k = 1: 12 × ±1 + five ±2;
 - k = 2: 20 × ±1 + three ±2;
 - k = 3: 24 × ±1 + two ±2.
+
+## 7. R8, k = 1: twelve ±1 on star(c), five ±2 labels V₁…V₅ off star(c) (DERIVED so far; OPEN)
+Notation:
+- v_k = the rep with h = +2.
+- G⁺ = aligned label pairs (v_k ∼ σv_l, v_k ≁ v_l); G⁻ = anti pairs (v_k ∼ v_l only); D₂ = pairs that are D-partners.
+- δ_k := #σv-nbrs − #v-nbrs of v_k.
+
+Facts:
+- **Degrees and parts.**
+  - Each ±2 root has exactly 2 + 2 nbrs in O_{c±} (L0), so starpart(v_k) = −8 + 2δ_k and δ_k ≥ 2.
+  - Each star root r has |φ(r)| ≥ 1, where φ = #v-nbrs − #σv-nbrs.
+- **Identities.** D := Σδ_k gives X := Σ_{star edges} hh = 32 − 4D and Σ_r(#opp − #same) = 80 − 4D. Hence D ∈ {10,12,14}.
+- **Symmetric Gram.** PSD of the symmetric E₋₄ Gram on {W₂, star(c), c±, x, other inner, zero roots} gives
+  E₂₂ ≤ 19 (edges inside W₂). Hence |G⁻| + |D₂| ≤ 2.
+- **E₄ pair lemma.** An anti pair has r_k·r_l = −1.
+- **Same-sign lemma (λ in N(r)).** Let r be a star root of sign +1 adjacent to v_k. r needs ≥ 2 σv-nbrs, and at most one of them may
+  be adjacent to v_k (N(r) is a matching). σv_k counts only if r lies in the D-orbit of V_k, and at most one + root does.
+  - So δ_k = 4 is impossible, and δ_k = 3 forces |G⁺(k)| = 3 with the 4th label non-aligned (not D, not anti).
+- **Aligned-graph shapes.** With G⁻ = D₂ = ∅, any two labels have ≤ 2 common G⁺-nbrs (μ). So **G⁺ ∈ {C₅, house}**; K₅−P₄, the
+  bowtie and K₂,₃ are all dead.
+- **House.** a, b have δ = 3 and each has one + star root r_a ≠ r_b. r_a's σv-nbrs ⊆ {σv_a, σv_z} ∪ one of {σv_b, σv_x, σv_y}.
+
+Next:
+- the D₇ cell analysis (net_d ∈ {0,±1}; C4: per line, ≤ 1 aligned partner of each relative sign; F4) for C₅ and the house;
+- the G⁻/D₂ ≠ ∅ variants.
