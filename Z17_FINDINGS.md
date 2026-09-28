@@ -13,7 +13,12 @@ Labels: PROVEN / DERIVED / PATTERN (sampled). Nothing here counts as an exclusio
    - Only 2/23 have a dead cell pair, i.e. an all-zero compatibility matrix.
    - Minimal wipeout cores have 3–6 cells.
    - The smallest core found is 3 pairwise disjoint cells (1,2), (3,4), (5,6) with class weights (2, 10, 6). Every X entry has a Y-partner or a Z-partner, never both. The reason is twos-parity mod 4, together with the ⊥y balance and L3.
-4. **Contrast (C2's data):**
+4. **Purely ℤ₄ (PATTERN, 12 skeletons, pairs 0 and 4).** Replace the integer cross-cell rule (w,w′)+r·r ∈ {0,±4} by the mod-4 rule alone,
+   (w,w′)+r·r ≡ 0 mod 4, and keep the cell domains as they are (the integer pair rule, M1, L1, the shapes).
+   - AC wipes out exactly the same skeletons: 11/11 wipeouts agree, and the 1 surviving skeleton survives both versions.
+   - So the |(u,v)| ≤ 1 bound plays no role in the kill. The obstruction is ℤ₄ self-orthogonality between the shaped lifts of the 21 residue classes.
+   - This is the candidate for a uniform lemma: a statement about self-dual ℤ₄ codes of type 4⁶2¹² whose residue is the graph of ρ.
+5. **Contrast (C2's data):**
    - E₈⊕ℤ⁹: AC kills 15/15, like ℤ¹⁷.
    - D₁₂⁺⊕ℤ⁵: AC kills 0/12. The per-skeleton LP kills are driven by the frame rows ("one pair per cell + frame" is infeasible in 21/23), not by the stars.
 
