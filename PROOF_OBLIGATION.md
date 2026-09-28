@@ -10,6 +10,18 @@ collecting side contradictions.*
   - **structures = R8**: k = 0 first, then k = 3, 2, 1.
 - Each closed cell gets a note and a one-line [RESULTAT].
 
+**STATUS (28/09 ~17:30).**
+- **R8.**
+  - k = 0 **CLOSED**: structures, TARGETS_AB_STRUCTURES §5–6; second reading by C1.
+  - The row-capacity lemma (C1, conway99-c1 notes/151 §2bis) kills every R8 pattern with a ±3 or ±4 entry.
+  - Left: k=1 (12±1 + five ±2), k=2 (20±1 + three ±2), k=3 (24±1 + two ±2).
+- **R6.**
+  - J0 closed (min N*); J1b closed (row capacity).
+  - J1a, split into the 6 configuration types of its three ±2 cells (notes/151 §2.7–2.9):
+    - (i), (ii), (iv), (vi) **closed**: λ = 1, the no-hub lemma, and harmonicity of the D₇ coordinates at the +2 vertices;
+    - (iii) P₄ and (v) triangle open.
+  - J2 and J3: structure only (notes/151 §1, §2ter).
+
 **Sources read.** This repo: RANK17_HANDOFF, README_TEAM, Z17_FINDINGS, GPT_FOLLOWUP_MINK/MIN97, out_kstar_all.json and
 out_kstar_ladder.json. conway99-c1: notes/139, 146–150 and data/rank17/open_after_sol.json. involution_exploratoire:
 ROUTE_C_PROOF.md. involution_lab_c1: audit_refutations.md. c2_experimental_ro: SYNTHESE.md.
