@@ -3,6 +3,13 @@
 *28/09/2026, ~13:00. Written at the user's request: reorganise the work around the main implication chain instead of
 collecting side contradictions.*
 
+**DECISION (28/09 ~13:30; C1, with the user's delegation; structures agrees).**
+- The finish line is **R6 ∧ R8**. R5, the old target (B), is dropped as a main target; it stays only as a base for J2.
+- Lanes:
+  - **C1 = R6**: J3, then J2, then J1a;
+  - **structures = R8**: k = 0 first, then k = 3, 2, 1.
+- Each closed cell gets a note and a one-line [RESULTAT].
+
 **Sources read.** This repo: RANK17_HANDOFF, README_TEAM, Z17_FINDINGS, GPT_FOLLOWUP_MINK/MIN97, out_kstar_all.json and
 out_kstar_ladder.json. conway99-c1: notes/139, 146–150 and data/rank17/open_after_sol.json. involution_exploratoire:
 ROUTE_C_PROOF.md. involution_lab_c1: audit_refutations.md. c2_experimental_ro: SYNTHESE.md.
