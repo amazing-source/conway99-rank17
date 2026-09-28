@@ -243,3 +243,29 @@ Ownership:
 - λ-exclusivity in O_{d^s} (each vertex has exactly one nbr there).
 - Every aggregated linear or quadratic identity is automatic, as C1 found. Kills need pointwise local structure plus one
   positivity inequality.
+
+### 7.1 T1 (aligned graph C₅) — framework (DERIVED, 28/09 night)
+**Setup.**
+- W₂ is the 10-cycle v₁−σv₂−v₃−σv₄−v₅−σv₁−v₂−σv₃−v₄−σv₅−v₁. Evens are the v's, odds the σv's.
+- Outside common-neighbour budget by C₁₀-distance: δ=1: 1 (the apex); δ=2: 1; δ=3, 4, 5: 2 (δ=5 is the D-orbit).
+- v's are adjacent only to −1 star roots and σv's only to +1 ones. So every even–odd role (apexes, δ = 3, 5) is inner or zero.
+- n_g = #star roots whose g-value is g. A := Σ_{−roots} C(g,2) = (16 + n₃)/2. n₁ = 8 + n₃, n₂ = 16 − 2n₃.
+
+**Identities.**
+- Over the 50 zeros, Σ|E| = Σ|O| = 30 and Σ(|E| − |O|)² = 28 − 2n₃ − 2X, so n₃ + X ≤ 14.
+- Σ_z |E||O| = 40 − 2Σ_d n_d⁺n_d⁻.
+- Pointwise, every zero satisfies 2|E|+|O| ≤ 8 and |E|+2|O| ≤ 8, and T(z) induces a matching in C₁₀.
+- **Per-zero identity** for z in cell {e^α, f^β}, with M(z) its −1 star nbrs (|M| = 2 + |E| − |O|) and ζ_k = its zero common
+  nbrs with v_k: Σ_{r∈M(z)} g(r) + n_e^α + n_f^β + 2|O(z)| + Σ_k ζ_k(z) = 10 − |E(z)|.
+- **Line rule.** Where L_d^± are the labels with sign ± at line d, each label in L_d has ≤ 1 aligned partner of equal sign and
+  ≤ 1 of opposite sign. This covers F4, forces deg_d ≤ 4, and makes a degree-4 line carry signs (x₁,x₂,−x₁,−x₂) along its P₄.
+- **Harmonicity** at v_k, with f = ρ·N: ξ_k − F_{k−1} − F_{k+1} + Σ_{zero nbrs} f = 0, where ξ_k = #v_k's star nbrs on X-lines.
+  If all 6 lines are X-lines, then Σ_{zero nbrs of v_k} f = F_{k−1} + F_{k+1} − 4.
+
+**Cyclic configuration** (ρ_k = e_k − e_{k+1} on lines 1..5, line 6 free, X = 0).
+- All 10 apexes are inner (k^±), so every zero's T-set is independent in C₁₀.
+- The per-zero identity kills (|E|,|O|) = (3,2) and (2,3) outright. (3,1) forces cell {6,f}, all g = 1 and ζ = 0.
+- Otherwise OPEN. It is the twin of C1's J1a type (v): X = 0 with all apexes inner.
+
+**Scale.** T1 alone has ~20–50 cell configurations up to D₅ × (S₆ ⋉ 2⁶); T2–T5 add more. Harmonicity bites when X > 0, like
+C1's J1a types (i) and (ii). The X = 0 / all-inner-apex branch needs a new idea, which may be shared with J1a (v).
