@@ -10,6 +10,19 @@ collecting side contradictions.*
   - **structures = R8**: k = 0 first, then k = 3, 2, 1.
 - Each closed cell gets a note and a one-line [RESULTAT].
 
+**STATUS (28/09, ~17:30 wall clock, after the user authorised exhaustive exact enumeration; C1).**
+- **R6 / J1a is CLOSED.** All 6 types are dead: (i), (ii), (iv) and (vi) by hand (notes/151); (v) and (iii) by exhaustive
+  PSD enumeration plus shell completion. See conway99-c1 notes/152 (commit 4bf5d98) and code/r6/j1av.
+  - (v): 2.74e9 support configurations, down to 0.
+  - (iii): 1.40e9, down to 0.
+- **The decisive tool** is shell completion. M_full = 28P₋₄ on all 42 labels has rank exactly 15, which gives three
+  conditions:
+  - (K): exact orthogonality of every non-support row to ker M_U;
+  - (B): the tight-frame budget Σ m_Y m_Yᵀ = 28M_U − M_U²;
+  - (S): the residuals of the added labels have rank ≤ 15 − rank M_U.
+  Support-level tests alone never close a cell.
+- **R6 open:** J2 and J3 only. **R8 open:** k=1 (structures, enumerator in progress), k=2 and k=3.
+
 **STATUS (28/09, late night; C1).** Details in conway99-c1 notes/151 §5–7.
 - **Coverage (CALCUL).**
   - R8 alone covers **676/754**; R6 alone 555; R5 412; R7 274.
