@@ -291,6 +291,58 @@ static int build(const unsigned *rows, const int *cols) {
     return 1;
 }
 
+/* exact mod-4 lift test (see z4test.py): self-dual Z4 codes with residue D <-> 6x6 matrix M over F2 (21 free bits) */
+static int use_z4 = 1;
+static long long st_z4 = 0;
+static unsigned bz[7];          /* bz[c], c=1..6: 24-bit basis masks (bits 0..6 e-part, 7..23 f-part) */
+static int Jz[7][7], kapz[7][7];
+static u64 SigZ[NC];            /* per cell: 64-bit set of 6-bit signatures */
+static int Mz[7];
+static int cellidx[7][7];
+static int z4_rec(int c) {
+    if (c == 7) return 1;
+    u64 S = SigZ[cellidx[0][c]];
+    while (S) {
+        int m = __builtin_ctzll(S); S &= S - 1;
+        int ok = 1;
+        for (int e = 1; e < c && ok; e++) if ((((m >> (e - 1)) & 1) ^ ((Mz[e] >> (c - 1)) & 1)) != Jz[c][e]) ok = 0;
+        for (int e = 1; e < c && ok; e++) { int v = Mz[e] ^ m ^ kapz[e][c]; if (!(SigZ[cellidx[e][c]] >> v & 1)) ok = 0; }
+        if (!ok) continue;
+        Mz[c] = m;
+        if (z4_rec(c + 1)) return 1;
+    }
+    return 0;
+}
+static int z4_ok(const unsigned *rows) {
+    for (int c = 1; c <= 6; c++) bz[c] = 1u | (1u << c) | (rows[c] << 7);
+    for (int c = 1; c <= 6; c++) for (int e = 1; e <= 6; e++) Jz[c][e] = (pc(bz[c] & bz[e]) / 2) & 1;
+    for (int c = 1; c <= 6; c++) for (int d = 1; d <= 6; d++) {
+        int v = 0;
+        for (int e = 1; e <= 6; e++) if (pc(bz[c] & bz[d] & bz[e]) & 1) v |= 1 << (e - 1);
+        kapz[c][d] = v;
+    }
+    for (int X = 0; X < NC; X++) {
+        cellidx[CC[X]][CD[X]] = X;
+        u64 S = 0;
+        int c = CC[X], d = CD[X];
+        for (int t = 0; t < ndom[X]; t++) {
+            const signed char *w = dom[X] + 34 * t;           /* w+ ; q+ = (e_c + e_d | w+) */
+            unsigned x = 0;                                   /* e-part: +1 entries give x = 0 */
+            for (int i = 0; i < 17; i++) {
+                int q = w[i], xi;
+                if (q & 1) xi = ((((q - 1) % 4) + 4) % 4) / 2; else xi = (((q % 4) + 4) % 4) / 2;
+                if (xi) x |= 1u << (7 + i);
+            }
+            int sig = 0;
+            for (int e = 1; e <= 6; e++) if (pc(x & bz[e]) & 1) sig |= 1 << (e - 1);
+            S |= 1ULL << sig;
+        }
+        SigZ[X] = S;
+        (void)c; (void)d;
+    }
+    return z4_rec(1);
+}
+
 /* plain DFS (sbdfs.c) */
 static int rec_plain(int k, double R[15][15]);
 static int try_plain(int k, int t, double R[15][15]) {
@@ -610,6 +662,7 @@ static void prep_common(void) {
         }
     }
 }
+static void free_common_dom(void) { for (int X = 0; X < NC; X++) { free(dom[X]); dom[X] = NULL; free(ipair[X]); ipair[X] = NULL; } }
 static void free_common(void) { for (int X = 0; X < NC; X++) { free(proj[X]); free(dom[X]); dom[X] = NULL; free(ipair[X]); ipair[X] = NULL; } }
 
 static int solve_plain(long long capv, long long *nodes_out) {
@@ -832,6 +885,12 @@ static void leaf(void) {
     clock_t c0 = clock();
     int bok = build(rows, cols);
     tm_build += (double)(clock() - c0) / CLOCKS_PER_SEC;
+    if (bok && use_z4 && !z4_ok(rows)) {
+        st_z4++;
+        if (fdbg && st_proc <= debugN) { for (int i = 0; i < 17; i++) fprintf(fdbg, "%02x", cols[i]); fprintf(fdbg, " Z4DEAD 0%c", 10); }
+        free_common_dom();
+        goto progress;
+    }
     if (!bok) {
         st_empty++;
         if (fdbg && st_proc <= debugN) { for (int i = 0; i < 17; i++) fprintf(fdbg, "%02x", cols[i]); fprintf(fdbg, " EMPTY 0\n"); }
@@ -873,8 +932,8 @@ static void leaf(void) {
 progress:
     if (time(NULL) - t_last >= 120) {
         t_last = time(NULL);
-        printf("  dup %lld | leaves %lld processed %lld empty %lld root %lld deeper %lld heavy %lld found %lld limit %lld m1_prunes %lld (%lds) t_build %.0f t_prep %.0f t_solve %.0f\n",
-               st_dup, st_leaves, st_proc, st_empty, st_root, st_deeper, st_heavy, st_found, st_limit, m1_prunes, (long)(time(NULL) - t_start),
+        printf("  z4 %lld dup %lld | leaves %lld processed %lld empty %lld root %lld deeper %lld heavy %lld found %lld limit %lld m1_prunes %lld (%lds) t_build %.0f t_prep %.0f t_solve %.0f\n",
+               st_z4, st_dup, st_leaves, st_proc, st_empty, st_root, st_deeper, st_heavy, st_found, st_limit, m1_prunes, (long)(time(NULL) - t_start),
                tm_build, tm_prep, tm_solve);
         fflush(stdout);
     }
@@ -946,6 +1005,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "countonly")) { countonly = 1; }
         else if (!strcmp(argv[a], "noac")) { use_ac = 0; }
         else if (!strcmp(argv[a], "nodom")) { use_dom = 0; }
+        else if (!strcmp(argv[a], "noz4")) { use_z4 = 0; }
         else if (!strcmp(argv[a], "probe") && a + 2 < argc) { probe_q = atof(argv[a + 1]); rng_state ^= (u64)atoll(argv[a + 2]) * 0xD1B54A32D192ED03ULL; if (!rng_state) rng_state = 7; a += 2; }
         else if (!strcmp(argv[a], "debug") && a + 2 < argc) { debugN = atoll(argv[a + 1]); fdbg = fopen(argv[a + 2], "w"); a += 2; }
     }
@@ -999,6 +1059,7 @@ int main(int argc, char **argv) {
             for (int c = 0; c < 7; c++) for (int d = c + 1; d < 7; d++) usable(rw[c] ^ rw[d]);
             clock_t c0 = clock();
             if (!build(rw, cols)) { printf("EMPTY 0 0.0s%c", 10); continue; }
+            if (use_z4 && !z4_ok(rw)) { printf("Z4DEAD 0 0.0s%c", 10); free_common_dom(); continue; }
             prep_common();
             long long nd; int r = solve_plain(2000, &nd), tier = 1;
             if (r == 2) { r = solve_bits(heavycap, &nd); tier = 2; }
@@ -1032,8 +1093,8 @@ int main(int argc, char **argv) {
     dfs(parts, ncl);
     snprintf(fn, sizeof fn, "%s.stats", argv[2]);
     FILE *fs = fopen(fn, "w");
-    fprintf(fs, "{\"dup\": %lld, \"leaves\": %lld, \"processed\": %lld, \"empty\": %lld, \"root\": %lld, \"deeper\": %lld, \"heavy\": %lld, \"found\": %lld, \"limit\": %lld, \"m1_prunes\": %lld, \"nodes\": %lld, \"sample\": %g, \"part\": [%d, %d], \"seconds\": %ld}\n",
-            st_dup, st_leaves, st_proc, st_empty, st_root, st_deeper, st_heavy, st_found, st_limit, m1_prunes, st_nodes, samp, part_r, part_m, (long)(time(NULL) - t_start));
+    fprintf(fs, "{\"z4dead\": %lld, \"dup\": %lld, \"leaves\": %lld, \"processed\": %lld, \"empty\": %lld, \"root\": %lld, \"deeper\": %lld, \"heavy\": %lld, \"found\": %lld, \"limit\": %lld, \"m1_prunes\": %lld, \"nodes\": %lld, \"sample\": %g, \"part\": [%d, %d], \"seconds\": %ld}\n",
+            st_z4, st_dup, st_leaves, st_proc, st_empty, st_root, st_deeper, st_heavy, st_found, st_limit, m1_prunes, st_nodes, samp, part_r, part_m, (long)(time(NULL) - t_start));
     fclose(fs); fclose(fsurv);
     if (fdbg) fclose(fdbg);
     printf("DONE leaves %lld processed %lld empty %lld root %lld deeper %lld heavy %lld found %lld limit %lld (%lds)\n",
