@@ -31,6 +31,7 @@ static time_t t_start, t_last;
 static long long debugN = 0; static FILE *fdbg = NULL;
 static double tm_build = 0, tm_prep = 0, tm_solve = 0;
 static int killer[NC + 1];
+static int countonly = 0, toponly = 0; static long long top_total = 0;
 
 static int pc(unsigned x) { return __builtin_popcount(x); }
 static double urand(void) { rng_state ^= rng_state << 13; rng_state ^= rng_state >> 7; rng_state ^= rng_state << 17; return (rng_state >> 11) * (1.0 / 9007199254740992.0); }
@@ -119,7 +120,47 @@ static u64 *htab; static int hcap = 0;
    Keys: 17 entries in [-8,8] packed 5 bits each into two u64 (lo: coords 0..11, hi: 12..16). */
 static int L3v[7][3], has3[7][3];
 static u64 *H3[7][3]; static long long H3n[7][3];
-static long long st_sum3 = 0;
+static int anybit(const u64 *b, int n);
+static long long st_sum3 = 0, st_acwipe = 0;
+static int use_ac = 1;
+/* compat[Y][X] for Y > X is not stored; revision of X by Y uses compat[X][Y] (X<Y) or the transpose test */
+static int ac_full(void) {
+    for (int X = 0; X < NC; X++) for (int t = 0; t < ndom[X]; t++) if (!rowdone[X][t]) compat_row(X, t);
+    u64 *al[NC];
+    for (int X = 0; X < NC; X++) al[X] = levb[0][X];
+    int changed = 1;
+    while (changed) {
+        changed = 0;
+        for (int X = 0; X < NC; X++)
+            for (int Y = 0; Y < NC; Y++) {
+                if (X == Y) continue;
+                for (int w = 0; w < nwd[X]; w++) {
+                    u64 x = al[X][w];
+                    while (x) {
+                        int bit = __builtin_ctzll(x); x &= x - 1;
+                        int t = 64 * w + bit, sup = 0;
+                        if (X < Y) {
+                            const u64 *row = compat[X][Y] + (size_t)t * nwd[Y];
+                            for (int i = 0; i < nwd[Y]; i++) if (row[i] & al[Y][i]) { sup = 1; break; }
+                        } else {
+                            /* Y < X: t in D_X is supported iff some alive q in D_Y has bit t in compat[Y][X] row q */
+                            for (int wq = 0; wq < nwd[Y] && !sup; wq++) {
+                                u64 y = al[Y][wq];
+                                while (y) {
+                                    int bq = __builtin_ctzll(y); y &= y - 1;
+                                    const u64 *row = compat[Y][X] + (size_t)(64 * wq + bq) * nwd[X];
+                                    if (row[t >> 6] >> (t & 63) & 1) { sup = 1; break; }
+                                }
+                            }
+                        }
+                        if (!sup) { al[X][w] &= ~(1ULL << bit); changed = 1; }
+                    }
+                }
+                if (!anybit(al[X], nwd[X])) return 0;
+            }
+    }
+    return 1;
+}
 static long long look3_cap = 150000;
 static void key85(const int *v, u64 *lo, u64 *hi) {
     u64 a = 0, b = 0;
@@ -509,7 +550,9 @@ static int solve_bits(long long capv, long long *nodes_out) {
     nodes = 0; cap = capv;
     double R[15][15];
     for (int i = 0; i < 15; i++) for (int j = 0; j < 15; j++) R[i][j] = (i == j) ? 28.0 : 0.0;
-    int r = rec_bits(0, R);
+    int r;
+    if (use_ac && !ac_full()) { r = 0; nodes = 1; st_acwipe++; }
+    else r = rec_bits(0, R);
     for (int v = 0; v < 7; v++) for (int pr = 0; pr < 3; pr++) if (has3[v][pr]) { free(H3[v][pr]); has3[v][pr] = 0; }
     for (int X = 0; X < NC; X++) {
         free(kp[X]); free(km[X]);
@@ -637,6 +680,16 @@ static void leaf(void) {
         canon_form(cols, cf);
         if (!hs_insert(cf)) { st_dup++; return; }
     }
+    if (countonly) {
+        st_proc++;
+        if (time(NULL) - t_last >= 60) {
+            t_last = time(NULL);
+            printf("  count: top %lld/%lld dup %lld distinct %lld leaves %lld (%lds)%c", top_counter, top_total, st_dup, st_proc, st_leaves,
+                   (long)(time(NULL) - t_start), 10);
+            fflush(stdout);
+        }
+        return;
+    }
     st_proc++;
     clock_t c0 = clock();
     int bok = build(rows, cols);
@@ -706,6 +759,7 @@ static void choose(Part *parts, int np, int a, int wt, unsigned forced) {
         if (!usable(m)) return;
         for (int r = 1; r < c; r++) { int d = pc(m ^ rows[r]); if (!GOOD(d) || (c >= 2 && d < w2) || !usable(m ^ rows[r])) return; }
         if (c == 1) {                          /* top-level branch: work split across machines */
+            if (toponly) { top_total++; return; }
             long long tc = top_counter++;
             if (tc % part_m != part_r) return;
         }
@@ -750,6 +804,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "part") && a + 2 < argc) { part_r = atoi(argv[a + 1]); part_m = atoi(argv[a + 2]); a += 2; }
         else if (!strcmp(argv[a], "heavycap") && a + 1 < argc) { heavycap = atoll(argv[a + 1]); a += 1; }
         else if (!strcmp(argv[a], "dedupe")) { dedupe = 1; }
+        else if (!strcmp(argv[a], "countonly")) { countonly = 1; }
+        else if (!strcmp(argv[a], "noac")) { use_ac = 0; }
         else if (!strcmp(argv[a], "debug") && a + 2 < argc) { debugN = atoll(argv[a + 1]); fdbg = fopen(argv[a + 2], "w"); a += 2; }
     }
     for (int i = 0; i < 17; i++) if (fscanf(f, "%d", &Y1[i]) != 1) return 1;
@@ -830,6 +886,8 @@ int main(int argc, char **argv) {
     }
     t_start = t_last = time(NULL);
     rows[0] = 0; nrows = 1;
+    toponly = 1; dfs(parts, ncl); toponly = 0;              /* count top-level branches first */
+    printf("top-level branches: %lld%c", top_total, 10); fflush(stdout);
     dfs(parts, ncl);
     snprintf(fn, sizeof fn, "%s.stats", argv[2]);
     FILE *fs = fopen(fn, "w");
