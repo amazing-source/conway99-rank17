@@ -1,6 +1,8 @@
 # ℤ¹⁷ findings (structures, night 27→28/09)
 
-Labels: PROVEN / DERIVED / PATTERN (sampled). Nothing here counts as an exclusion until PASS 2 finishes.
+Labels: PROVEN / DERIVED / PATTERN (sampled). Nothing here counts as an exclusion until PASS 2 finishes, except:
+- **Pair 7: COMPUTED, excluded at the skeleton level.** Its exhaustive stage A (PE + usability + incremental M1 + coverage) has 0 leaves (36 s).
+  An independent check is requested from C2.
 
 ## Kill mechanisms (PATTERN, pairs 0, 1, 2, 4, 5)
 
@@ -31,6 +33,27 @@ Labels: PROVEN / DERIVED / PATTERN (sampled). Nothing here counts as an exclusio
   - full arc consistency first;
   - then the search, ordered dynamically by smallest domain first. This gives 5–500× fewer nodes on heavy cases.
 - Keep the first tier in fixed order. Dynamic ordering there is 10× slower, because it breaks the first-cell kill.
+
+## Exact mod-4 test (Z4) — the current main filter (DERIVED, checked)
+
+- If the frame codewords q_u = (r_u | w_u) are pairwise orthogonal mod 4, they lie in one self-dual ℤ₄ code Q with residue D.
+- Such codes correspond to φ with
+  - φ(d+d′) = φ(d) + φ(d′) + d∗d′, and
+  - φ(d)(d′) + φ(d′)(d) = |d∩d′|/2.
+
+  On the basis b_c = d_{1c}, this is a 6×6 matrix M with M + Mᵀ fixed: 21 bits.
+- Each cell gives a signature set Σ_cd ⊂ F₂⁶, where σ(q) = ((q − q̃)/2 mod D^⊥) and M1 is σ(q⁺) = σ(q⁻). The skeleton is mod-4
+  feasible ⟺ some M satisfies φ(d_cd) ∈ Σ_cd for all 21 cells.
+- In C (z17pipe11), this runs before the search. It kills 99.2% of pair-0 and about 92% of pair-4 distinct skeletons, in microseconds.
+  It matches z4test.py on 80 leaves.
+- Every previously known heavy skeleton (pairs 0 and 4) has 0 feasible M.
+- Skeletons that pass Z4 have 350–1,900 feasible M. Each M shrinks the total domain by about 30×.
+
+## Rejected experiments (verdict-neutral, but slower)
+
+- Dynamic ordering in the first (plain) tier: 10× slower.
+- Partial Z4 inside stage A: pair 7 goes from 45 s to more than 300 s, because rebuilding partial domains at every deep node is too costly.
+- Splitting by feasible M, with a fixed-order search per M: 23× slower than AC plus dynamic ordering on the full domains.
 
 ## Scale
 
