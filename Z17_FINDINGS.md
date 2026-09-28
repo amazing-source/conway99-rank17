@@ -49,6 +49,17 @@ Labels: PROVEN / DERIVED / PATTERN (sampled). Nothing here counts as an exclusio
 - Every previously known heavy skeleton (pairs 0 and 4) has 0 feasible M.
 - Skeletons that pass Z4 have 350–1,900 feasible M. Each M shrinks the total domain by about 30×.
 
+## Symmetry C: coordinate sign flips (28/09 ~05:00)
+
+- Every coordinate i with y1_i = y2_i = 0 gives a symmetry f_i → −f_i. Pair 0 has 3 such coordinates, pair 4 has 6, pair 6 has 9.
+- Breaking it has two parts:
+  - (a) the h-flip normalisation looks only at coordinates outside that set, which makes it C-invariant;
+  - (b) a lex-leader rule along the search path: the first non-zero entry at each such coordinate (w⁺ before w⁻) must be positive.
+- Result:
+  - pair-4 heavy cases need up to 63× fewer nodes, with the same verdicts;
+  - the pair-6 LIMIT lead (040c0408…, Z4-feasible and LP-feasible, 5·10⁷ nodes) is now EXCLUDED in 72,757 nodes.
+- In a general V the same symmetry comes from reflections in unit vectors e ∈ K. They are not in W(R_K).
+
 ## Rejected experiments (verdict-neutral, but slower)
 
 - Dynamic ordering in the first (plain) tier: 10× slower.
