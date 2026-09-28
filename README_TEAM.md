@@ -51,29 +51,27 @@
   - All reproduce the Python node counts exactly.
   - `sbdfs_g` was also tested in a random basis.
 
-## Status (28/09 ~01:50)
+## Status (28/09 ~04:40)
 
-### PASS 1 (Python, 5% samples), all PATTERN
+### ℤ¹⁷
 
-| Pair | Processed | Survivors | Notes |
-|---|---|---|---|
-| 0 | 1,248 | 0 | Both leads EXCLUDED |
-| 4 | 1,910 | 0 | 9 heavy cases, all EXCLUDED |
-| 5 | 132 | 0 | |
+- **Pair 7: COMPUTED.** Exhaustive stage A has 0 skeletons.
+- **Pairs 0 and 6:** exhaustive PASS 2 running on `z17pipe17`, 0 survivors.
+  - Pipeline: stage A + incremental M1 + S₇ dedupe, then exact Z4, then the Z4 code-consistency filter, then plain DFS, then AC + the per-code AC split + dynamic-ordering bitset DFS.
+- **Queue:** pairs 1 and 2 after pair 0; pairs 3 and 5 after pair 6; pair 4 after pair 7's stats.
+- **Independent check:** C1 is running all 8 pairs through its engine (`c1_recherche`: `rank17_z4.c`).
 
-### PASS 2 (exhaustive, all C, `z17/z17pipe.c` → COMPUTED once finished)
+### Other V's
 
-Running on pairs 0 and 4. So far 0 survivors on either.
+- **C1's engine** (PASS 2, exhaustive):
+  - canonical skeleton enumeration under W(R_K), with the pointwise stabiliser chain;
+  - the exact Z4 test on partial and full skeletons.
+  - A11E6⁺ #31 (10¹⁰ raw skeletons) is decided in 4 s. E8²⊕ℤ is fully excluded.
+  - All 1,053 pairs of C1's 6 V's are expected in about 2 h.
+- **C2 (E₈⊕ℤ⁹, D₁₂⁺⊕ℤ⁵):** PATTERN-dead so far, using LP + AC + MITM.
+  - D₁₂⁺ is AC-resistant: there the frame rows are needed.
+  - The lab PC has no compiler.
 
-Pipeline:
-- stage A as above, with incremental M1 (prunes 55% of leaves);
-- S₇ canonical dedupe: 79–87% of leaves are duplicates;
-- per-leaf domain build;
-- two-tier exact DFS: plain search to 2000 nodes, then bitsets with 1-, 2- and 3-open star look-ahead.
+### Key lemma material
 
-Checks against the Python pipeline:
-- identical verdicts and node counts on 150 + 150 leaves;
-- the canonical form matches Python on 400 leaves;
-- every later speed-up keeps the same verdicts.
-
-Also in `bin/`: static builds (UCRT only) of `sbdfs_g.exe` (the general-V stage B), `z17pipe.exe` and `stageA.exe`.
+See `Z17_FINDINGS.md`: the lift-layer kill is purely ℤ₄, and the exact Z4 test uses 21 bits.
