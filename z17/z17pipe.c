@@ -34,6 +34,7 @@ static int killer[NC + 1];
 static int countonly = 0, toponly = 0; static long long top_total = 0;
 static double probe_q = 1.0;
 static long maxtime = 0; static int stop_now = 0;
+static FILE *fdump = NULL;       /* dump mode: write each new canonical form (as coordinate-indexed columns), no solving */
 
 static int pc(unsigned x) { return __builtin_popcount(x); }
 /* Short-dual-class obstruction (DC, Sol 28/09, proof read by structures): for kappa in K* with n = 7|kappa|^2 in
@@ -71,6 +72,34 @@ static void dc_build(const int *y1, const int *y2) {
     dc_rec(0, g, 0);
 }
 static int dc_hit(unsigned m) { return dcB[m >> 3] >> (m & 7) & 1; }
+/* Sol 28/09 section 7.2 (PROVEN, graph-origin): a dual vector kappa with 7|kappa|^2 = 5 has cut size exactly 2, i.e. p(kappa)
+   has weight 2 in F2^7/<1>. For Z^17, kappa = P_W(v) with v in Z^17, and p(v)_r = parity |odd(v) & rows[r]|. Prefix test: with
+   o ones and z zeros among the known bits 0..c, the final number of ones O must lie in {2,5} (O = 2 needs z <= 5, O = 5 needs
+   z <= 2). */
+static int use_k57 = 0, nk57 = 0; static unsigned k57odd[256]; static long long k57_prunes = 0;
+static void k57_rec(int i, int *g, int nrm) {
+    if (i == 17) {
+        if (!nrm) return;
+        int a1 = 0, a2 = 0, odd = 0;
+        for (int j = 0; j < 17; j++) { a1 += g[j] * dcY1[j]; a2 += g[j] * dcY2[j]; if (g[j] & 1) odd |= 1 << j; }
+        if (7 * nrm - a1 * a1 - a2 * a2 != 5) return;
+        for (int t = 0; t < nk57; t++) if (k57odd[t] == (unsigned)odd) return;
+        if (nk57 < 256) k57odd[nk57++] = (unsigned)odd;
+        return;
+    }
+    for (int v = -1; v <= 1; v++) { int nn = nrm + v * v; if (nn > 3) continue; g[i] = v; k57_rec(i + 1, g, nn); }
+    g[i] = 0;
+}
+static int k57_ok(const unsigned *rw, int c, unsigned m) {       /* rw[0..c-1] set, candidate m becomes row c */
+    for (int t = 0; t < nk57; t++) {
+        int o = 0, zz = 1;                       /* bit 0 (rows[0] = 0) is a zero */
+        for (int r = 1; r <= c; r++) { unsigned rr = (r == c) ? m : rw[r]; if (pc(rr & k57odd[t]) & 1) o++; else zz++; }
+        int rem = 6 - c;
+        int ok2 = (o <= 2 && 2 <= o + rem && zz <= 5), ok5 = (o <= 5 && 5 <= o + rem && zz <= 2);
+        if (!ok2 && !ok5) return 0;
+    }
+    return 1;
+}
 static double urand(void) { rng_state ^= rng_state << 13; rng_state ^= rng_state >> 7; rng_state ^= rng_state << 17; return (rng_state >> 11) * (1.0 / 9007199254740992.0); }
 static int canon7(int x) { return (x & 1) ? (x ^ 127) : x; }
 
@@ -1194,6 +1223,14 @@ static void leaf(void) {
         unsigned char cf[17];
         canon_form(cols, cf);
         if (!hs_insert(cf)) { st_dup++; return; }
+        if (fdump) {
+            int oc[17], pos = 0;
+            for (int a = 0; a < ncls; a++) for (int j = 0; j < clsn[a]; j++) oc[clsidx[a][j]] = cf[pos++];
+            for (int i = 0; i < 17; i++) fprintf(fdump, "%02x", oc[i]);
+            fputc(10, fdump);
+            st_proc++;
+            return;
+        }
     }
     if (countonly) {
         st_proc++;
@@ -1282,6 +1319,7 @@ static void choose(Part *parts, int np, int a, int wt, unsigned forced) {
         if ((pc(m & (unsigned)O1) & 1) || (pc(m & (unsigned)O2) & 1)) return;
         if (!usable(m)) return;
         for (int r = 1; r < c; r++) { int d = pc(m ^ rows[r]); if (!GOOD(d) || (c >= 2 && d < w2) || !usable(m ^ rows[r])) return; }
+        if (use_k57 && !k57_ok(rows, c, m)) { k57_prunes++; return; }
         if (use_dc) {
             for (int msk = 0; msk < (1 << (c - 1)); msk++) {
                 unsigned sp = m;
@@ -1517,6 +1555,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[a], "ce") && a + 1 < argc) { use_ce = 1; ce_nmax = atoi(argv[a + 1]); a += 1; }
         else if (!strcmp(argv[a], "pz4")) { knuth_pz4 = 1; }
         else if (!strcmp(argv[a], "dc")) { use_dc = 1; }
+        else if (!strcmp(argv[a], "k57")) { use_k57 = 1; }
+        else if (!strcmp(argv[a], "dump") && a + 1 < argc) { fdump = fopen(argv[a + 1], "w"); a += 1; }
         else if (!strcmp(argv[a], "debug") && a + 2 < argc) { debugN = atoll(argv[a + 1]); fdbg = fopen(argv[a + 2], "w"); a += 2; }
     }
     for (int i = 0; i < 17; i++) if (fscanf(f, "%d", &Y1[i]) != 1) return 1;
@@ -1544,7 +1584,8 @@ int main(int argc, char **argv) {
         }
     }
     fclose(f);
-    if (use_dc) { dc_build(Y1, Y2); printf("DC: %lld forbidden classes%c", dc_count, 10); fflush(stdout); }
+    if (use_dc || use_k57) { if (!dcB) dc_build(Y1, Y2); if (use_dc) { printf("DC: %lld forbidden classes%c", dc_count, 10); fflush(stdout); } }
+    if (use_k57) { int g[17] = {0}; k57_rec(0, g, 0); printf("K57: %d norm-5/7 dual classes (odd supports)%c", nk57, 10); fflush(stdout); }
     if (use_ce) { ce_build(Y1, Y2); printf("CE: %d short dual vectors with n <= %d%c", nkap, ce_nmax, 10); fflush(stdout); }
     usab = calloc(1u << 17, 1); amask = calloc(1u << 17, sizeof(int *)); namask = calloc(1u << 17, sizeof(int));
     ptr_c = calloc(1u << 17, sizeof(PTrip *)); ptr_n = calloc(1u << 17, sizeof(int));
@@ -1650,6 +1691,7 @@ int main(int argc, char **argv) {
     fprintf(fs, "{\"ce\": %d, \"ce_calls\": %lld, \"ce_kill\": %lld, \"dc\": %d, \"dc_prunes\": %lld, \"z4dead\": %lld, \"dup\": %lld, \"leaves\": %lld, \"processed\": %lld, \"empty\": %lld, \"root\": %lld, \"deeper\": %lld, \"heavy\": %lld, \"found\": %lld, \"limit\": %lld, \"m1_prunes\": %lld, \"nodes\": %lld, \"sample\": %g, \"part\": [%d, %d], \"seconds\": %ld}\n",
             use_ce ? ce_nmax : 0, st_ce_calls, st_ce_kill, use_dc, dc_prunes, st_z4, st_dup, st_leaves, st_proc, st_empty, st_root, st_deeper, st_heavy, st_found, st_limit, m1_prunes, st_nodes, samp, part_r, part_m, (long)(time(NULL) - t_start));
     fclose(fs); fclose(fsurv);
+    if (fdump) fclose(fdump);
     if (fdbg) fclose(fdbg);
     printf("DONE leaves %lld processed %lld empty %lld root %lld deeper %lld heavy %lld found %lld limit %lld (%lds)\n",
            st_leaves, st_proc, st_empty, st_root, st_deeper, st_heavy, st_found, st_limit, (long)(time(NULL) - t_start));
