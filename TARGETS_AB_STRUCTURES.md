@@ -269,3 +269,35 @@ Ownership:
 
 **Scale.** T1 alone has ~20–50 cell configurations up to D₅ × (S₆ ⋉ 2⁶); T2–T5 add more. Harmonicity bites when X > 0, like
 C1's J1a types (i) and (ii). The X = 0 / all-inner-apex branch needs a new idea, which may be shared with J1a (v).
+
+## 9. The interlacing (principal-submatrix) test — new global tool (28/09 late; DERIVED)
+**Statement.** Put Y' = {x} ∪ N(x) ∪ (support roots of h), a σ-invariant vertex set whose induced subgraph is (partly) forced.
+- P₋₄ = (27I − 9A + J)/63 and P₃ = (44I + 11A − 2J)/77 are orthogonal projectors of rank 44 and 54. So on every vertex set Y:
+  (27I − 9A_Y + J) ⪰ 0 with rank ≤ 44, and (44I + 11A_Y − 2J) ⪰ 0.
+- By σ-parity, with orbit counts o₋ (odd) and o₊ (even): the odd part has rank ≤ 22 and the even part has rank ≤ 22, because
+  dim E₋₄^± = 22 (tr σ = 0 on E₋₄).
+- Label form of the odd part: M_U := 4N_UU + 12I − (RR^T)_UU = 28·(Π₄)_UU must be PSD with rank ≤ 15. Equivalently, the σ-odd
+  quotient of Γ[N(x) ∪ U-roots] has λ_max ≤ 3, and 3 is Γ's largest odd eigenvalue.
+- Only the induced subgraph is needed: A² was eliminated with A² = 12I − A + 2J.
+- **Why it is new.** Local λ/μ counts never see the second eigenvalue, and every summed identity is automatic. This test is an
+  inequality plus a rank bound, so it can bite.
+
+**R8 k = 1.** Here |U| = 17 > 15, so M_U must have a 2-dimensional kernel. One kernel vector is automatic, Re_c (↔ the block
+3-vector f_c). A second one means a σ-odd 3-eigenvector supported on N(x) ∪ star(c) ∪ W₂.
+- Even side: 25 orbits, so nullity ≥ 3. Two kernel vectors are automatic, (A+4)e_x and (A+4)(e_c⁺ + e_c⁻).
+- **Crude test T0**, independent of the star matchings Q, P. N_SS has row sums ≤ 2, so M_SS ⪯ 20 on 1^⊥. Hence the Schur complement
+  Σ = M_WW − M_WS M_SS^+ M_SW ⪯ M_WW − M_WS M_SW/20. So **20M_WW − M_WS M_SW ⪰ 0** is necessary. It depends only on the W–W
+  structure and on the star–W incidences.
+- CHECK (random samples, not a proof): 337 T1-cyclic local configurations satisfying the λ/μ upper bounds on Y'. Every one has
+  rank_Q(M_U) = 16 and M_U not PSD. The even part has rank 23 > 22 and is not PSD. T0 alone kills 89%.
+- J1a(v) (C1's cell, |U| = 15): the odd test plus the even test killed every one of 536 random samples. The odd test alone does
+  not always suffice.
+
+**Status.** An exhaustive enumerator of all R8 k=1 local configurations is written: r8k1/r8k1.c. It does not use the T1–T5
+reductions.
+- Levels: W-skeletons (40 shapes, 123 flip-normalised signed skeletons); W–W states; ε; star–W incidences with T0 pruning on
+  leading blocks; Q, P matchings. Every leaf is tested with odd/even P₋₄ (PSD + rank) and P₃.
+- Every PSD kill is certified by an integer vector z with z^T M z < 0, checked exactly in int64. Every rank kill is checked mod
+  2³¹−1.
+- The user allows exact enumeration with certificates (relayed by C1, 28/09 late). It has not been run yet; the machine was busy
+  with C1's J1a(v) run.
