@@ -9,6 +9,18 @@ collecting side contradictions.*
   - **C1 = R6**: J3, then J2, then J1a;
   - **structures = R8**: k = 0 first, then k = 3, 2, 1.
 - Each closed cell gets a note and a one-line [RESULTAT].
+**STATUS (28/09 ~18:30), saved before an auto-compaction.**
+- **J1a (iii) and (v) remain open.**
+  - They pass every local test: per-coordinate harmonicity (all 64 group choices), star-Gram and E4-pair bounds, and automatic
+    counts.
+  - There is no pinned class for the Cauchy–Schwarz trick, because every zero touches star(c).
+- **Data (r6_data/RESULTS_28_09.md).**
+  - 220 of the 555 R6 classes have a single n=6 witness; there are no linked n=6 pairs.
+  - 395 of the 754 open classes contain a short triple (all norms ≤ 8): (6,8,8) in 302, (6,6,8) in 157, (5,5,6) in 88.
+- **Proposed next target for C1 (not yet started):** a triple theorem, "no graph realises a (6,8,8) triple". It would close 302
+  classes with a joint hypothesis that is strictly stronger than any single witness.
+- **Lanes:** structures is on R8 k=1 (TARGETS_AB_STRUCTURES §7). C1 is on R6, at the J1a / triple decision point.
+
 
 **STATUS (28/09 ~17:30).**
 - **R8.**
