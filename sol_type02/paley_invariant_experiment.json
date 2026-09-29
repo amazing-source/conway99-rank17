@@ -1,0 +1,26 @@
+{
+  "extra_assumption": "N invariant under simultaneous affine group x -> a*x+b, a in {1,2,4}, on the two Paley edge orbits",
+  "not_a_reduction_of_all_Type0": true,
+  "solutions": 0,
+  "statistics": [
+    {
+      "mode": 0,
+      "within_same_patterns": 90,
+      "within_opp_patterns": 45,
+      "cross_patterns": 1085280,
+      "NR_feasible": 4208,
+      "row_caps_feasible": 481,
+      "smallest_squared_polynomial_residual": 72
+    },
+    {
+      "mode": 1,
+      "within_same_patterns": 1260,
+      "within_opp_patterns": 840,
+      "cross_patterns": 420,
+      "NR_feasible": 219,
+      "row_caps_feasible": 69,
+      "smallest_squared_polynomial_residual": 104
+    }
+  ],
+  "seconds": 0.38736194100010835
+}

@@ -1,0 +1,60 @@
+{
+  "anchors_verified": 77,
+  "all_coordinate_switches_verified": 9856,
+  "independent_full_scan_agrees": true,
+  "labelled_tournaments_scanned": 2097152,
+  "invalid_balanced_Type0_rejected": true,
+  "invalid_anchor_first_triangle": {
+    "vertices": [
+      0,
+      1,
+      2
+    ],
+    "sum_Same": 1
+  },
+  "small_magnitude_patterns": [
+    {
+      "m": 21,
+      "odd_threes": 0,
+      "even_twos": 0,
+      "even_fours": 0,
+      "row_capacity_survives": true
+    },
+    {
+      "m": 29,
+      "odd_threes": 0,
+      "even_twos": 2,
+      "even_fours": 0,
+      "row_capacity_survives": true
+    },
+    {
+      "m": 37,
+      "odd_threes": 0,
+      "even_twos": 4,
+      "even_fours": 0,
+      "row_capacity_survives": true
+    },
+    {
+      "m": 29,
+      "odd_threes": 1,
+      "even_twos": 0,
+      "even_fours": 0,
+      "row_capacity_survives": false
+    },
+    {
+      "m": 37,
+      "odd_threes": 1,
+      "even_twos": 2,
+      "even_fours": 0,
+      "row_capacity_survives": true
+    },
+    {
+      "m": 37,
+      "odd_threes": 2,
+      "even_twos": 0,
+      "even_fours": 0,
+      "row_capacity_survives": true
+    }
+  ],
+  "scope": "No N-matrix completion was searched or certified."
+}
