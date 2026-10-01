@@ -87,12 +87,59 @@ D-type tree and a lattice classification.
   non-degenerate; cell {x,y} has form σ_x + σ_y. Explicit model: F₂⁴ = F₂ ⊕ F₈,
   σ_x((t,u),(t′,u′)) = Tr(ζ^{−x}(tu′ + t′u)) + Tr(ζ^{−3x}(uu′² + u²u′)), with Pfaffian Tr(ab²).
 - Consequences for a frame in this class:
-  1. both orbits of a cell are the two ovoids through one point i_p, so the unsigned frame is a map
-     p ↦ i_p from the 21 cells to the 15 points; the signs at i_p are opposite;
-  2. no cell is sibling and no sisters are adjacent (κ_p = 0 for all p);
-  3. every D-square is of disjoint type: the two ovoids meet in 3 points with all three signs opposite;
-  4. star relation mod 2: Σ_{p∋c} ω_p(i_p, ·) = 0 for every line c;
-  5. point regularity: 2·#{p : i_p = x} + #{p : ω_p(i_p, x) = 1} = 14 for every point x;
-  6. counting 5 in two ways: the number of pairs of cells with the same point equals the number of pairs of cells with
-     the same plane i_p^⊥.
+  1. **(corrected 01/10 evening)** the two orbits of a cell are either two different ovoids of its form, meeting in one
+     point i_p with opposite signs there (κ_p = 0), or the SAME ovoid with 3, 4 or 5 signs changed (κ_p = 0, 1, 2).
+     The first version of this list assumed the two ovoids were always different; that was wrong.
+  2. so sibling cells and adjacent sisters are possible; they are exactly the same-ovoid cells with 5 or 4 sign changes;
+  3. every D-square is sibling or of disjoint type (two ovoids meeting in 3 points with all three signs opposite);
+     one-block D-squares cannot occur;
+  4. star relation mod 2, over the cells with two different ovoids: Σ_{p∋c} ω_p(i_p, ·) = 0 for every line c;
+  5. point regularity: every point lies in exactly 14 of the 42 ovoids.
+  (Items 4–6 of the first version were stated for different-ovoid cells only and are superseded by 4–5.)
 - Not yet shown: that no such map with signs exists.
+
+
+## 9. Hand mathematics, 01/10 evening (DERIVED; the CHECK lines are small exact verifications of the hand claims)
+
+**Lemma C (minuscule projections).** Let R be an irreducible component of the root system of N. For every orbit U the
+projection of x_U on span(R) is zero or a minuscule weight of R, and these projections form a tight frame:
+Σ_U π_R(x_U) π_R(x_U)ᵀ = 7·Id on span(R).
+- Proof. By Lemma B, (n, x_U) ∈ {0, ±1} for every root n; a weight with all root pairings in {0, ±1} is zero or minuscule.
+  The frame identity restricts to any subspace. ∎
+- Minuscule norms: A₁ 1/2; A₃ 3/4, 1; A₅ 5/6, 4/3, 3/2; A₇ 7/8, 3/2, 15/8, 2; D_m 1 (vector), m/4 (spinor); E₇ 3/2.
+- For D_m ⊂ ℤ^m: every axis carries 7 − n_s/4 vector weights, n_s ≡ 0 (mod 4), and the spinor signs form m mutually
+  orthogonal ±1 columns of length n_s.
+
+**The 13 classes without norm-1 vectors (lattice data, `RN.py`):**
+
+| # | roots of L_β | roots of N | rank of R(N) |
+|---|---|---|---|
+| 1 | none | A₁¹⁵ | 15 |
+| 2 | A₁⁴ | A₁A₃³ | 10 |
+| 3 | A₁⁸ | A₁¹¹D₄ | 15 |
+| 4 | A₁²A₂² | A₁²A₃A₅ | 10 |
+| 5 | A₁⁶A₃ | A₃²A₅ | 11 |
+| 6 | A₃² | A₁A₃D₅ | 9 |
+| 7 | A₁⁴A₃² | A₁⁷D₄² | 15 |
+| 8 | rank 3 + rank 4 | A₁³A₇ | 10 |
+| 9 | A₁⁵ + rank 5 | A₅D₅ | 10 |
+| 10 | D₄² | A₁⁹D₆ | 15 |
+| 11 | A₇ | A₁D₇ | 8 |
+| 12 | D₄D₅ | A₁⁵D₄D₆ | 15 |
+| 13 | D₈ | A₁⁸E₇ | 15 |
+
+- **Class 13 is dead by arithmetic:** the E₇ budget needs (3/2)·n = 7·7, and 98/3 is not an integer. (Same kill as the
+  dimension count of §4, now a one-line proof.)
+- No other class dies on the norm budgets alone (checked by hand for A₁, A₃, A₅, A₇, D₄, D₅, D₆, D₇).
+
+**Rootless class (#1), verified facts (CHECK, `z7_H.py`):** the seven forms σ_x in the F₂ ⊕ F₈ model have zero sum,
+non-degenerate pairwise sums and degenerate triple sums; every cell form has 6 ovoids, two of them meet in one point;
+ovoids of cells sharing a line meet in 0 or 2 points (1 : 5), of disjoint cells in 1 or 3 points (4 : 2); for an ovoid O
+and an adjacent form, one ovoid is disjoint from O and the other five cut O in the edges of a pentagon.
+
+**No 7-fold symmetric frame in the rootless class (CHECK, `z7_H.py`).** With the element of order 7 acting on the lines,
+no choice of six signed base ovoids is even pairwise compatible with its rotations. (An invariant frame can be taken
+invariant under the pure permutation, since H¹(ℤ₇, F₂¹⁵) = 0.)
+
+**Not done.** Whether the rootless class has a frame at all is open. A star-level count did not finish (Python version
+stopped by the time limit, C version cut at 15 minutes), so I do not know if even one star exists there.
