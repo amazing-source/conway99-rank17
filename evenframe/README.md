@@ -65,3 +65,34 @@ arc-consistency propagation.
 ## 7. Dead end recorded
 The 42 A₇-orbit ovoids of PG(3,2) (weight-5 words of the [15,11] Hamming code) looked like a candidate frame in ℤ¹⁵.
 Their intersection parities are 5 odd / 36 even per ovoid, against 21 / 20 required. Not a frame (`pg32.py`, `ovoid42.py`).
+
+## 8. Hand mathematics, 01/10 afternoon (DERIVED, no computation; needs a second reader)
+Notation: N := √2·L_β* (even, rank 15, det 2⁷, defined at k = 28), so L_β = √2·N*; x_U := β_U/√2 ∈ N*, norm 5/2.
+
+**Lemma B.** For every root n of N and every orbit U, (n, x_U) ∈ {0, ±1}, and exactly 14 of the 42 values are ±1.
+- Proof. The frame gives Σ_U (n, x_U)² = 7|n|² = 14, and Cauchy–Schwarz gives |(n, x_U)| ≤ 2. If (n, x_U) = ±2 then
+  x_U ∓ n is a vector of N* of norm 1/2, i.e. √2 times it is a norm-1 vector of L_β, against Lemma A. ∎
+
+**Dictionary between the two decompositions (at k = 28).** With Z_p := √2(β_{p+} + β_{p−})/2 ∈ N and ρ_Q := β_U + β_DU ∈ L_β:
+- cell p is sibling ⟺ Z_p = 0; sisters X-adjacent ⟺ Z_p is a root of N; otherwise |Z_p|² = 4;
+- a D-square is sibling ⟺ ρ_Q = 0; one-block (anchored or twisted) ⟺ ρ_Q is a root of L_β; disjoint ⟺ |ρ_Q|² = 4.
+So a lattice class with no roots in L_β has only sibling or disjoint D-squares. This is the first map between C2's
+D-type tree and a lattice classification.
+
+**The rootless class is a problem about PG(3,2).** Here L_β = Λ(Hamming [15,11,3]) ⊂ ℤ¹⁵ and N ⊃ A₁¹⁵.
+- The norm-5 vectors of L_β are the 168 projective frames ("ovoids") of PG(3,2) with signs.
+- Each ovoid is an ovoid of the generalized quadrangle W(2) of exactly one of the 28 symplectic forms on F₂⁴; a form has
+  6 ovoids, two of them meet in exactly one point, and each point lies on 2 of them.
+- The 28 forms are the pairs of the 8 points; the seven lines are seven forms σ_x with Σσ_x = 0 and all σ_x + σ_y
+  non-degenerate; cell {x,y} has form σ_x + σ_y. Explicit model: F₂⁴ = F₂ ⊕ F₈,
+  σ_x((t,u),(t′,u′)) = Tr(ζ^{−x}(tu′ + t′u)) + Tr(ζ^{−3x}(uu′² + u²u′)), with Pfaffian Tr(ab²).
+- Consequences for a frame in this class:
+  1. both orbits of a cell are the two ovoids through one point i_p, so the unsigned frame is a map
+     p ↦ i_p from the 21 cells to the 15 points; the signs at i_p are opposite;
+  2. no cell is sibling and no sisters are adjacent (κ_p = 0 for all p);
+  3. every D-square is of disjoint type: the two ovoids meet in 3 points with all three signs opposite;
+  4. star relation mod 2: Σ_{p∋c} ω_p(i_p, ·) = 0 for every line c;
+  5. point regularity: 2·#{p : i_p = x} + #{p : ω_p(i_p, x) = 1} = 14 for every point x;
+  6. counting 5 in two ways: the number of pairs of cells with the same point equals the number of pairs of cells with
+     the same plane i_p^⊥.
+- Not yet shown: that no such map with signs exists.
